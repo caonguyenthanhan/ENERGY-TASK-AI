@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ParsedTask } from './ai';
+import { supabase } from './supabase';
 
 export type EnergyLevel = 'high' | 'normal' | 'low';
 
@@ -49,38 +50,49 @@ const initialState: AppState = {
 function useTaskStoreInternal() {
   const [state, setState] = useState<AppState>(initialState);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        const today = new Date().toDateString();
-        if (parsed.lastCheckInDate !== today) {
-          parsed.energyLevel = null;
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed && typeof parsed === 'object') {
+            const today = new Date().toDateString();
+            if (parsed.lastCheckInDate !== today) {
+              parsed.energyLevel = null;
+            }
+            // Ensure arrays exist for older versions
+            parsed.apiKeys = Array.isArray(parsed.apiKeys) ? parsed.apiKeys : [];
+            parsed.customPrompt = typeof parsed.customPrompt === 'string' ? parsed.customPrompt : '';
+            parsed.tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
+              ...t,
+              subtasks: Array.isArray(t.subtasks) ? t.subtasks : [],
+              isImportant: t.isImportant ?? false,
+              isUrgent: t.isUrgent ?? false,
+            })) : [];
+            
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setState({ ...initialState, ...parsed });
+          }
+        } catch (e) {
+          console.error('Failed to parse state', e);
         }
-        // Ensure arrays exist for older versions
-        parsed.apiKeys = parsed.apiKeys || [];
-        parsed.customPrompt = parsed.customPrompt || '';
-        parsed.tasks = (parsed.tasks || []).map((t: any) => ({
-          ...t,
-          subtasks: t.subtasks || [],
-          isImportant: t.isImportant ?? false,
-          isUrgent: t.isUrgent ?? false,
-        }));
-        
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setState(parsed);
-      } catch (e) {
-        console.error('Failed to parse state', e);
       }
+    } catch (e) {
+      console.error('localStorage access denied', e);
     }
     setIsLoaded(true);
   }, []);
 
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.error('localStorage setItem failed', e);
+      }
     }
   }, [state, isLoaded]);
 
@@ -173,9 +185,68 @@ function useTaskStoreInternal() {
     return scoredTasks[0] || null;
   };
 
+  const syncData = async () => {
+    if (!isLoaded) return;
+    setIsSyncing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setIsSyncing(false);
+        return;
+      }
+
+      const userId = session.user.id;
+      
+      // Fetch remote data
+      const { data: remoteData, error: fetchError } = await supabase
+        .from('user_data')
+        .select('state')
+        .eq('user_id', userId)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error fetching remote data:', fetchError);
+        throw fetchError;
+      }
+
+      let mergedState = { ...state };
+
+      if (remoteData?.state) {
+        // Simple merge: remote takes precedence for now, or we can just use remote if it's newer
+        // For simplicity, we'll just overwrite local state with remote if remote exists
+        // A better approach would be to merge tasks by ID, but this works for a basic sync
+        const parsedRemote = typeof remoteData.state === 'string' ? JSON.parse(remoteData.state) : remoteData.state;
+        mergedState = { ...mergedState, ...parsedRemote };
+        setState(mergedState);
+      }
+
+      // Save merged state back to remote
+      const { error: upsertError } = await supabase
+        .from('user_data')
+        .upsert({ 
+          user_id: userId, 
+          state: mergedState,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+
+      if (upsertError) {
+        console.error('Error saving to remote:', upsertError);
+        throw upsertError;
+      }
+
+      alert('Đồng bộ dữ liệu thành công!');
+    } catch (e: any) {
+      console.error('Sync failed:', e);
+      alert('Đồng bộ thất bại: ' + e.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return {
     ...state,
     isLoaded,
+    isSyncing,
     setEnergyLevel,
     setApiKeys,
     setCustomPrompt,
@@ -186,6 +257,7 @@ function useTaskStoreInternal() {
     resetSkippedTasks,
     updateTask,
     getTopTask,
+    syncData,
   };
 }
 

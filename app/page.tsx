@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Trophy, RefreshCw, Settings } from 'lucide-react';
+import { Zap, Trophy, RefreshCw, Settings, Database } from 'lucide-react';
 import { useTaskStore, Task } from '@/lib/store';
 import EnergyCheckIn from '@/components/EnergyCheckIn';
 import ZenTask from '@/components/ZenTask';
 import BrainDumpInput from '@/components/BrainDumpInput';
 import EditTaskModal from '@/components/EditTaskModal';
 import SettingsModal from '@/components/SettingsModal';
+import SyncModal from '@/components/SyncModal';
 
 export default function Home() {
   const {
@@ -27,6 +28,7 @@ export default function Home() {
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSync, setShowSync] = useState(false);
   
   const [filterStatus, setFilterStatus] = useState<'all' | 'todo' | 'done' | 'skipped'>('all');
   const [filterImportant, setFilterImportant] = useState(false);
@@ -72,6 +74,13 @@ export default function Home() {
             <Trophy className="w-4 h-4 text-amber-500" />
             <span className="text-sm font-medium text-zinc-300">{points} điểm</span>
           </div>
+          <button
+            onClick={() => setShowSync(true)}
+            className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 transition-colors"
+            title="Đồng bộ dữ liệu"
+          >
+            <Database className="w-5 h-5" />
+          </button>
           <button
             onClick={() => setShowSettings(true)}
             className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 transition-colors"
@@ -198,6 +207,9 @@ export default function Home() {
         )}
         {showSettings && (
           <SettingsModal onClose={() => setShowSettings(false)} />
+        )}
+        {showSync && (
+          <SyncModal onClose={() => setShowSync(false)} />
         )}
       </AnimatePresence>
     </main>
