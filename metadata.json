@@ -1,5 +1,5 @@
 {
   "name": "Energy-Task AI",
   "description": "Trợ lý ảo sắp xếp công việc dựa trên Deadline, Mức độ ưu tiên và Năng lượng cá nhân.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["microphone"]
 }
