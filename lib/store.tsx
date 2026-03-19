@@ -30,10 +30,16 @@ export type Task = {
   timerRemaining?: number;
 };
 
+export type EnergyRecord = {
+  date: string; // YYYY-MM-DD
+  level: EnergyLevel;
+};
+
 type AppState = {
   tasks: Task[];
   energyLevel: EnergyLevel | null;
   lastCheckInDate: string | null;
+  energyHistory: EnergyRecord[];
   points: number;
   apiKeys: string[];
   customPrompt: string;
@@ -45,6 +51,7 @@ const initialState: AppState = {
   tasks: [],
   energyLevel: null,
   lastCheckInDate: null,
+  energyHistory: [],
   points: 0,
   apiKeys: [],
   customPrompt: '',
@@ -181,7 +188,24 @@ function useTaskStoreInternal() {
   }, [state, isLoaded, user]);
 
   const setEnergyLevel = (level: EnergyLevel) => {
-    setState(prev => ({ ...prev, energyLevel: level, lastCheckInDate: new Date().toDateString() }));
+    setState(prev => {
+      const today = new Date().toISOString().split('T')[0];
+      const existingIndex = prev.energyHistory?.findIndex(r => r.date === today) ?? -1;
+      let newHistory = prev.energyHistory ? [...prev.energyHistory] : [];
+      
+      if (existingIndex >= 0) {
+        newHistory[existingIndex] = { date: today, level };
+      } else {
+        newHistory.push({ date: today, level });
+      }
+
+      return { 
+        ...prev, 
+        energyLevel: level, 
+        lastCheckInDate: new Date().toDateString(),
+        energyHistory: newHistory
+      };
+    });
   };
 
   const setApiKeys = (keys: string[]) => setState(prev => ({ ...prev, apiKeys: keys }));

@@ -8,6 +8,38 @@ import { CheckCircle2, XCircle, Play, Pause, RotateCcw, SplitSquareHorizontal, L
 import { Task, useTaskStore } from '@/lib/store';
 import { breakDownTaskWithAI } from '@/lib/ai';
 
+const playBeepSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    
+    const playTone = (freq: number, startTime: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      gainNode.gain.setValueAtTime(0.5, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+      
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+
+    const now = ctx.currentTime;
+    playTone(880, now, 0.2);
+    playTone(880, now + 0.3, 0.2);
+    playTone(1108.73, now + 0.6, 0.4); // C#6
+  } catch (e) {
+    console.error("Audio play failed", e);
+  }
+};
+
 interface Props {
   task: Task;
   onComplete: (taskId: string) => void;
@@ -21,6 +53,7 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
   const [isActive, setIsActive] = useState(task.timerStatus === 'running');
   const [isBreakingDown, setIsBreakingDown] = useState(false);
   const [newSubtask, setNewSubtask] = useState('');
+  const [showTimerComplete, setShowTimerComplete] = useState(false);
 
   // Sync state from task props (e.g., when updated from another device)
   useEffect(() => {
@@ -44,7 +77,8 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
     } else if (timeLeft === 0 && isActive) {
       setIsActive(false);
       updateTask(task.id, { timerStatus: 'idle', timerRemaining: 0 });
-      // Play sound or notify
+      playBeepSound();
+      setShowTimerComplete(true);
     }
     return () => clearInterval(interval);
   }, [isActive, timeLeft, task.id, updateTask]);
@@ -267,6 +301,38 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
           </button>
         </form>
       </div>
+
+      <AnimatePresence>
+        {showTimerComplete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowTimerComplete(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl overflow-hidden text-center"
+            >
+              <div className="w-16 h-16 rounded-full bg-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 className="w-8 h-8 text-indigo-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Hết giờ!</h2>
+              <p className="text-zinc-400 mb-6">Bạn đã hoàn thành phiên làm việc cho công việc này.</p>
+              <button
+                onClick={() => setShowTimerComplete(false)}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
+              >
+                Đóng
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

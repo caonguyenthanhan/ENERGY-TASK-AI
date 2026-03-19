@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Trophy, RefreshCw, Settings, Database, User } from 'lucide-react';
+import { Zap, Trophy, RefreshCw, Settings, Database, User, BarChart2 } from 'lucide-react';
 import { useTaskStore, Task } from '@/lib/store';
 import EnergyCheckIn from '@/components/EnergyCheckIn';
 import ZenTask from '@/components/ZenTask';
@@ -10,6 +10,8 @@ import BrainDumpInput from '@/components/BrainDumpInput';
 import EditTaskModal from '@/components/EditTaskModal';
 import SettingsModal from '@/components/SettingsModal';
 import ProfileModal from '@/components/ProfileModal';
+import WeeklyReportModal from '@/components/WeeklyReportModal';
+import ChatBot from '@/components/ChatBot';
 
 export default function Home() {
   const {
@@ -29,6 +31,7 @@ export default function Home() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showSync, setShowSync] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   
   const [filterStatus, setFilterStatus] = useState<'all' | 'todo' | 'done' | 'skipped'>('all');
   const [filterImportant, setFilterImportant] = useState(false);
@@ -85,6 +88,13 @@ export default function Home() {
             <Trophy className="w-4 h-4 text-amber-500" />
             <span className="text-sm font-medium text-zinc-300">{points} điểm</span>
           </div>
+          <button
+            onClick={() => setShowReport(true)}
+            className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 transition-colors"
+            title="Báo cáo tuần"
+          >
+            <BarChart2 className="w-5 h-5" />
+          </button>
           <button
             onClick={() => setShowSync(true)}
             className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 transition-colors"
@@ -222,7 +232,11 @@ export default function Home() {
         {showSync && (
           <ProfileModal onClose={() => setShowSync(false)} />
         )}
+        {showReport && (
+          <WeeklyReportModal onClose={() => setShowReport(false)} />
+        )}
       </AnimatePresence>
+      <ChatBot />
     </main>
   );
 }
