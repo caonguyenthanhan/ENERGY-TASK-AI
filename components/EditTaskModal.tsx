@@ -1,0 +1,153 @@
+'use client';
+
+import { useState } from 'react';
+import { motion } from 'motion/react';
+import { X, Calendar, Clock, Activity, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Task } from '@/lib/store';
+
+interface Props {
+  task: Task;
+  onClose: () => void;
+  onSave: (taskId: string, updates: Partial<Task>) => void;
+}
+
+export default function EditTaskModal({ task, onClose, onSave }: Props) {
+  const [title, setTitle] = useState(task.title);
+  const [deadline, setDeadline] = useState(
+    task.deadline ? new Date(task.deadline).toISOString().split('T')[0] : ''
+  );
+  const [status, setStatus] = useState(task.status);
+  const [duration, setDuration] = useState(task.durationMinutes);
+  const [isImportant, setIsImportant] = useState(task.isImportant);
+  const [isUrgent, setIsUrgent] = useState(task.isUrgent);
+
+  const handleSave = () => {
+    onSave(task.id, {
+      title,
+      deadline: deadline ? new Date(deadline).toISOString() : null,
+      status,
+      durationMinutes: duration,
+      isImportant,
+      isUrgent,
+    });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-zinc-100">Chỉnh sửa công việc</h2>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-1.5">Nội dung công việc</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              placeholder="Nhập tên công việc..."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5 flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Hạn chót
+              </label>
+              <input
+                type="date"
+                value={deadline}
+                onChange={e => setDeadline(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 [color-scheme:dark]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5 flex items-center gap-2">
+                <Clock className="w-4 h-4" /> Thời lượng (phút)
+              </label>
+              <input
+                type="number"
+                value={duration}
+                onChange={e => setDuration(Number(e.target.value))}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              onClick={() => setIsImportant(!isImportant)}
+              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border transition-colors ${
+                isImportant 
+                  ? 'bg-amber-500/10 border-amber-500/50 text-amber-500' 
+                  : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700'
+              }`}
+            >
+              <AlertCircle className="w-4 h-4" /> Quan trọng
+            </button>
+            <button
+              onClick={() => setIsUrgent(!isUrgent)}
+              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border transition-colors ${
+                isUrgent 
+                  ? 'bg-rose-500/10 border-rose-500/50 text-rose-500' 
+                  : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700'
+              }`}
+            >
+              <AlertTriangle className="w-4 h-4" /> Gấp
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-1.5 flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Trạng thái
+            </label>
+            <select
+              value={status}
+              onChange={e => setStatus(e.target.value as any)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+            >
+              <option value="todo">Cần làm</option>
+              <option value="done">Đã hoàn thành</option>
+              <option value="skipped">Bỏ qua / Dời lại</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-8 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition-colors"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors"
+          >
+            Lưu thay đổi
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}

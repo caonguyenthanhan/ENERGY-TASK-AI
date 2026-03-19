@@ -4,12 +4,24 @@ import { ParsedTask } from './ai';
 
 export type EnergyLevel = 'high' | 'normal' | 'low';
 
-export type Task = ParsedTask & {
+export type Subtask = {
   id: string;
+  title: string;
+  isCompleted: boolean;
+};
+
+export type Task = {
+  id: string;
+  title: string;
+  deadline: string | null;
+  durationMinutes: number;
+  isImportant: boolean;
+  isUrgent: boolean;
+  subtasks: Subtask[];
   createdAt: string;
   completedAt: string | null;
   status: 'todo' | 'done' | 'skipped';
-  score?: number; // Calculated dynamically
+  score?: number;
 };
 
 type AppState = {
@@ -17,33 +29,43 @@ type AppState = {
   energyLevel: EnergyLevel | null;
   lastCheckInDate: string | null;
   points: number;
+  apiKeys: string[];
+  customPrompt: string;
 };
 
-const STORAGE_KEY = 'energy_task_ai_state';
+const STORAGE_KEY = 'energy_task_ai_state_v2';
 
 const initialState: AppState = {
   tasks: [],
   energyLevel: null,
   lastCheckInDate: null,
   points: 0,
+  apiKeys: [],
+  customPrompt: '',
 };
 
 export function useTaskStore() {
   const [state, setState] = useState<AppState>(initialState);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load from local storage
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        
-        // Reset energy if it's a new day
         const today = new Date().toDateString();
         if (parsed.lastCheckInDate !== today) {
           parsed.energyLevel = null;
         }
+        // Ensure arrays exist for older versions
+        parsed.apiKeys = parsed.apiKeys || [];
+        parsed.customPrompt = parsed.customPrompt || '';
+        parsed.tasks = (parsed.tasks || []).map((t: any) => ({
+          ...t,
+          subtasks: t.subtasks || [],
+          isImportant: t.isImportant ?? false,
+          isUrgent: t.isUrgent ?? false,
+        }));
         
         // eslint-disable-next-line
         setState(parsed);
@@ -54,7 +76,6 @@ export function useTaskStore() {
     setIsLoaded(true);
   }, []);
 
-  // Save to local storage
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -62,111 +83,91 @@ export function useTaskStore() {
   }, [state, isLoaded]);
 
   const setEnergyLevel = (level: EnergyLevel) => {
-    setState(prev => ({
-      ...prev,
-      energyLevel: level,
-      lastCheckInDate: new Date().toDateString(),
-    }));
+    setState(prev => ({ ...prev, energyLevel: level, lastCheckInDate: new Date().toDateString() }));
+  };
+
+  const setApiKeys = (keys: string[]) => setState(prev => ({ ...prev, apiKeys: keys }));
+  const setCustomPrompt = (prompt: string) => setState(prev => ({ ...prev, customPrompt: prompt }));
+  
+  const clearAllData = () => {
+    setState(initialState);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   const addTasks = (parsedTasks: ParsedTask[]) => {
     const newTasks: Task[] = parsedTasks.map(pt => ({
       ...pt,
       id: uuidv4(),
+      subtasks: [],
       createdAt: new Date().toISOString(),
       completedAt: null,
       status: 'todo',
     }));
-
-    setState(prev => ({
-      ...prev,
-      tasks: [...prev.tasks, ...newTasks],
-    }));
+    setState(prev => ({ ...prev, tasks: [...prev.tasks, ...newTasks] }));
   };
 
   const completeTask = (taskId: string) => {
     setState(prev => {
       const task = prev.tasks.find(t => t.id === taskId);
       let pointsEarned = 10;
-      
-      // Bonus points for boring/hard tasks
-      if (task?.emotion === 'boring') pointsEarned += 20;
-      if (task?.difficulty === 'hard') pointsEarned += 20;
+      if (task?.isImportant) pointsEarned += 20;
+      if (task?.isUrgent) pointsEarned += 10;
 
       return {
         ...prev,
         points: prev.points + pointsEarned,
-        tasks: prev.tasks.map(t => 
-          t.id === taskId 
-            ? { ...t, status: 'done', completedAt: new Date().toISOString() } 
-            : t
-        ),
+        tasks: prev.tasks.map(t => t.id === taskId ? { ...t, status: 'done', completedAt: new Date().toISOString() } : t),
       };
     });
   };
 
   const skipTask = (taskId: string) => {
-    setState(prev => ({
-      ...prev,
-      tasks: prev.tasks.map(t => 
-        t.id === taskId ? { ...t, status: 'skipped' } : t
-      ),
-    }));
+    setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === taskId ? { ...t, status: 'skipped' } : t) }));
   };
 
   const resetSkippedTasks = () => {
-    setState(prev => ({
-      ...prev,
-      tasks: prev.tasks.map(t => 
-        t.status === 'skipped' ? { ...t, status: 'todo' } : t
-      ),
-    }));
+    setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.status === 'skipped' ? { ...t, status: 'todo' } : t) }));
+  };
+
+  const updateTask = (taskId: string, updates: Partial<Task>) => {
+    setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t) }));
   };
 
   const getTopTask = (): Task | null => {
     if (!state.energyLevel) return null;
-
     const activeTasks = state.tasks.filter(t => t.status === 'todo');
     if (activeTasks.length === 0) return null;
 
-    // Scoring Algorithm
     const scoredTasks = activeTasks.map(task => {
       let score = 0;
       const now = new Date().getTime();
       
-      // 1. Deadline Factor
       if (task.deadline) {
         const deadlineTime = new Date(task.deadline).getTime();
         const hoursLeft = (deadlineTime - now) / (1000 * 60 * 60);
-        
-        if (hoursLeft < 0) score += 100; // Overdue!
-        else if (hoursLeft < 24) score += 50; // Due today
-        else if (hoursLeft < 72) score += 20; // Due soon
+        if (hoursLeft < 0) score += 100;
+        else if (hoursLeft < 24) score += 50;
+        else if (hoursLeft < 72) score += 20;
       }
 
-      // 2. Energy & Emotion Match
+      // Eisenhower Matrix
+      if (task.isImportant && task.isUrgent) score += 80; // Q1
+      else if (task.isImportant && !task.isUrgent) score += 60; // Q2
+      else if (!task.isImportant && task.isUrgent) score += 40; // Q3
+      else score += 10; // Q4
+
+      // Energy Match
       if (state.energyLevel === 'high') {
-        // Eat the frog: Prioritize hard/boring tasks
-        if (task.difficulty === 'hard') score += 30;
-        if (task.emotion === 'boring') score += 30;
-        if (task.emotion === 'fun') score -= 10;
+        if (task.isImportant) score += 30;
       } else if (state.energyLevel === 'low') {
-        // Build momentum: Prioritize easy/fun tasks OR punish hard tasks
-        if (task.difficulty === 'hard') score -= 30;
-        if (task.emotion === 'boring') score -= 20;
-        if (task.emotion === 'fun') score += 40;
-        if (task.difficulty === 'easy') score += 30;
-      } else {
-        // Normal energy: Balanced
-        if (task.difficulty === 'medium') score += 10;
+        if (!task.isImportant && !task.isUrgent) score += 40;
+        if (task.isUrgent && !task.isImportant) score += 20;
       }
 
       return { ...task, score };
     });
 
-    // Sort by score descending
     scoredTasks.sort((a, b) => (b.score || 0) - (a.score || 0));
-
     return scoredTasks[0] || null;
   };
 
@@ -174,10 +175,14 @@ export function useTaskStore() {
     ...state,
     isLoaded,
     setEnergyLevel,
+    setApiKeys,
+    setCustomPrompt,
+    clearAllData,
     addTasks,
     completeTask,
     skipTask,
     resetSkippedTasks,
+    updateTask,
     getTopTask,
   };
 }

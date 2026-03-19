@@ -13,7 +13,7 @@ export default function EnergyCheckIn({ onSelect }: Props) {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center min-h-[60vh] space-y-8"
+      className="flex flex-col items-center justify-center h-full min-h-[400px] space-y-8 py-8"
     >
       <div className="text-center space-y-2">
         <h2 className="text-3xl font-semibold tracking-tight text-zinc-100">

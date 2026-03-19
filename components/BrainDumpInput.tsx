@@ -1,15 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'motion/react';
 import { Send, Loader2, Sparkles } from 'lucide-react';
 import { parseTaskWithAI, ParsedTask } from '@/lib/ai';
+import { useTaskStore } from '@/lib/store';
 
 interface Props {
   onTasksAdded: (tasks: ParsedTask[]) => void;
 }
 
 export default function BrainDumpInput({ onTasksAdded }: Props) {
+  const { apiKeys, customPrompt, tasks } = useTaskStore();
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -19,16 +20,16 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
 
     setIsProcessing(true);
     try {
-      const parsedTasks = await parseTaskWithAI(input);
+      const parsedTasks = await parseTaskWithAI(input, apiKeys, customPrompt, tasks);
       if (parsedTasks && parsedTasks.length > 0) {
         onTasksAdded(parsedTasks);
         setInput('');
       } else {
         alert("Không tìm thấy công việc nào trong câu nói của bạn. Vui lòng thử lại.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Đã có lỗi xảy ra khi phân tích công việc.");
+      alert(error.message || "Đã có lỗi xảy ra khi phân tích công việc.");
     } finally {
       setIsProcessing(false);
     }
@@ -43,7 +44,7 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder='Đổ mọi thứ ra đây... VD: "Làm báo cáo tài chính thứ 6 nộp, mất khoảng 2 tiếng, việc này rất chán"'
+          placeholder='Đổ mọi thứ ra đây... VD: "Làm báo cáo tài chính thứ 6 nộp, mất khoảng 2 tiếng, việc này rất quan trọng và gấp"'
           className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 pl-12 pr-16 text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none min-h-[120px]"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -61,7 +62,7 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
         </button>
       </form>
       <p className="text-xs text-center text-zinc-600 mt-3">
-        Nhấn Enter để gửi. AI sẽ tự động bóc tách Deadline, Thời lượng và Cảm xúc.
+        Nhấn Enter để gửi. AI sẽ tự động bóc tách Deadline, Thời lượng và phân loại Quan trọng/Gấp.
       </p>
     </div>
   );
