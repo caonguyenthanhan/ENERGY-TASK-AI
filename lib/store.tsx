@@ -51,7 +51,10 @@ function useTaskStoreInternal() {
   const [state, setState] = useState<AppState>(initialState);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const isRemoteUpdate = React.useRef(false);
 
+  // Load initial state from localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -86,6 +89,7 @@ function useTaskStoreInternal() {
     setIsLoaded(true);
   }, []);
 
+  // Save to localStorage
   useEffect(() => {
     if (isLoaded) {
       try {
@@ -95,6 +99,83 @@ function useTaskStoreInternal() {
       }
     }
   }, [state, isLoaded]);
+
+  // Handle Auth State
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Real-time Supabase Subscription
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchInitial = async () => {
+      const { data } = await supabase.from('user_data').select('state').eq('user_id', user.id).single();
+      if (data?.state) {
+        isRemoteUpdate.current = true;
+        const parsedRemote = typeof data.state === 'string' ? JSON.parse(data.state) : data.state;
+        setState(prev => ({ ...prev, ...parsedRemote }));
+      }
+    };
+    fetchInitial();
+
+    const channel = supabase
+      .channel('user_data_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_data',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.new && (payload.new as any).state) {
+            isRemoteUpdate.current = true;
+            const newState = (payload.new as any).state;
+            const parsedRemote = typeof newState === 'string' ? JSON.parse(newState) : newState;
+            setState(prev => ({ ...prev, ...parsedRemote }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // Auto-sync to Supabase
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+
+    if (isRemoteUpdate.current) {
+      isRemoteUpdate.current = false;
+      return; // Skip pushing if the change came from remote
+    }
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await supabase
+          .from('user_data')
+          .upsert({ 
+            user_id: user.id, 
+            state: state,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id' });
+      } catch (e) {
+        console.error('Auto-sync failed:', e);
+      }
+    }, 1500); // Debounce 1.5s
+
+    return () => clearTimeout(timeoutId);
+  }, [state, isLoaded, user]);
 
   const setEnergyLevel = (level: EnergyLevel) => {
     setState(prev => ({ ...prev, energyLevel: level, lastCheckInDate: new Date().toDateString() }));

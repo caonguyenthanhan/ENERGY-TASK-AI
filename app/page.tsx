@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Trophy, RefreshCw, Settings, Database } from 'lucide-react';
+import { Zap, Trophy, RefreshCw, Settings, Database, User } from 'lucide-react';
 import { useTaskStore, Task } from '@/lib/store';
 import EnergyCheckIn from '@/components/EnergyCheckIn';
 import ZenTask from '@/components/ZenTask';
 import BrainDumpInput from '@/components/BrainDumpInput';
 import EditTaskModal from '@/components/EditTaskModal';
 import SettingsModal from '@/components/SettingsModal';
-import SyncModal from '@/components/SyncModal';
+import ProfileModal from '@/components/ProfileModal';
 
 export default function Home() {
   const {
@@ -77,9 +77,9 @@ export default function Home() {
           <button
             onClick={() => setShowSync(true)}
             className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 transition-colors"
-            title="Đồng bộ dữ liệu"
+            title="Tài khoản & Đồng bộ"
           >
-            <Database className="w-5 h-5" />
+            <User className="w-5 h-5" />
           </button>
           <button
             onClick={() => setShowSettings(true)}
@@ -209,7 +209,7 @@ export default function Home() {
           <SettingsModal onClose={() => setShowSettings(false)} />
         )}
         {showSync && (
-          <SyncModal onClose={() => setShowSync(false)} />
+          <ProfileModal onClose={() => setShowSync(false)} />
         )}
       </AnimatePresence>
     </main>

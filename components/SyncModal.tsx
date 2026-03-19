@@ -43,7 +43,13 @@ export default function SyncModal({ onClose }: Props) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { error } = await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+          }
+        });
         if (error) throw error;
         alert('Vui lòng kiểm tra email để xác nhận tài khoản!');
       }
