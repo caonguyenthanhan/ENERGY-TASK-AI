@@ -27,6 +27,10 @@ export default function Home() {
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  
+  const [filterStatus, setFilterStatus] = useState<'all' | 'todo' | 'done' | 'skipped'>('all');
+  const [filterImportant, setFilterImportant] = useState(false);
+  const [filterUrgent, setFilterUrgent] = useState(false);
 
   if (!isLoaded) {
     return (
@@ -41,6 +45,13 @@ export default function Home() {
 
   const topTask = getTopTask();
   const skippedTasksCount = tasks.filter(t => t.status === 'skipped').length;
+
+  const filteredTasks = tasks.filter(task => {
+    if (filterStatus !== 'all' && task.status !== filterStatus) return false;
+    if (filterImportant && !task.isImportant) return false;
+    if (filterUrgent && !task.isUrgent) return false;
+    return true;
+  });
 
   return (
     <main className="flex-1 flex flex-col max-w-7xl mx-auto w-full px-4 sm:px-6 py-8">
@@ -113,7 +124,7 @@ export default function Home() {
 
         {/* Right Column: Task List */}
         <div className="w-full lg:w-[400px] xl:w-[450px] flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-3xl p-6 h-[calc(100vh-10rem)] sticky top-8">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Danh sách công việc</h2>
             {skippedTasksCount > 0 && (
               <button
@@ -125,11 +136,25 @@ export default function Home() {
             )}
           </div>
 
+          {/* Filters */}
+          <div className="flex flex-col gap-2 mb-4">
+            <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+              <button onClick={() => setFilterStatus('all')} className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === 'all' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>Tất cả</button>
+              <button onClick={() => setFilterStatus('todo')} className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === 'todo' ? 'bg-indigo-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>Cần làm</button>
+              <button onClick={() => setFilterStatus('done')} className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === 'done' ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>Đã xong</button>
+              <button onClick={() => setFilterStatus('skipped')} className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === 'skipped' ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>Bỏ qua</button>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setFilterImportant(!filterImportant)} className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${filterImportant ? 'bg-amber-500/10 border-amber-500/50 text-amber-500' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}>Quan trọng</button>
+              <button onClick={() => setFilterUrgent(!filterUrgent)} className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${filterUrgent ? 'bg-rose-500/10 border-rose-500/50 text-rose-500' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}>Gấp</button>
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-            {tasks.length === 0 ? (
-              <p className="text-zinc-500 text-center py-10 text-sm">Chưa có công việc nào. Hãy nhập ở bên dưới.</p>
+            {filteredTasks.length === 0 ? (
+              <p className="text-zinc-500 text-center py-10 text-sm">Không có công việc nào phù hợp.</p>
             ) : (
-              tasks.map(task => (
+              filteredTasks.map(task => (
                 <div
                   key={task.id}
                   onClick={() => setEditingTask(task)}

@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+'use client';
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ParsedTask } from './ai';
 
@@ -44,7 +46,7 @@ const initialState: AppState = {
   customPrompt: '',
 };
 
-export function useTaskStore() {
+function useTaskStoreInternal() {
   const [state, setState] = useState<AppState>(initialState);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -67,7 +69,7 @@ export function useTaskStore() {
           isUrgent: t.isUrgent ?? false,
         }));
         
-        // eslint-disable-next-line
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setState(parsed);
       } catch (e) {
         console.error('Failed to parse state', e);
@@ -185,4 +187,19 @@ export function useTaskStore() {
     updateTask,
     getTopTask,
   };
+}
+
+const StoreContext = createContext<ReturnType<typeof useTaskStoreInternal> | null>(null);
+
+export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const store = useTaskStoreInternal();
+  return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
+}
+
+export function useTaskStore() {
+  const context = useContext(StoreContext);
+  if (!context) {
+    throw new Error('useTaskStore must be used within a StoreProvider');
+  }
+  return context;
 }
