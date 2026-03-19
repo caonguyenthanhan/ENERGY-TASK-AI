@@ -48,6 +48,17 @@ export default function Home() {
   const topTask = getTopTask();
   const skippedTasksCount = tasks.filter(t => t.status === 'skipped').length;
 
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return null;
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleDateString('vi-VN');
+    } catch {
+      return null;
+    }
+  };
+
   const filteredTasks = tasks.filter(task => {
     if (filterStatus !== 'all' && task.status !== filterStatus) return false;
     if (filterImportant && !task.isImportant) return false;
@@ -177,9 +188,9 @@ export default function Home() {
                     {task.title}
                   </h4>
                   <div className="flex flex-wrap gap-2 text-[11px] text-zinc-500">
-                    {task.deadline && (
+                    {formatDate(task.deadline) && (
                       <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
-                        Hạn: {new Date(task.deadline).toLocaleDateString('vi-VN')}
+                        Hạn: {formatDate(task.deadline)}
                       </span>
                     )}
                     <span className="px-2 py-0.5 rounded bg-zinc-800">{task.durationMinutes}p</span>

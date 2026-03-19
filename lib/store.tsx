@@ -25,6 +25,9 @@ export type Task = {
   completedAt: string | null;
   status: 'todo' | 'done' | 'skipped';
   score?: number;
+  timerStatus?: 'idle' | 'running' | 'paused';
+  timerStartedAt?: string | null;
+  timerRemaining?: number;
 };
 
 type AppState = {
@@ -238,11 +241,18 @@ function useTaskStoreInternal() {
       const now = new Date().getTime();
       
       if (task.deadline) {
-        const deadlineTime = new Date(task.deadline).getTime();
-        const hoursLeft = (deadlineTime - now) / (1000 * 60 * 60);
-        if (hoursLeft < 0) score += 100;
-        else if (hoursLeft < 24) score += 50;
-        else if (hoursLeft < 72) score += 20;
+        try {
+          const d = new Date(task.deadline);
+          if (!isNaN(d.getTime())) {
+            const deadlineTime = d.getTime();
+            const hoursLeft = (deadlineTime - now) / (1000 * 60 * 60);
+            if (hoursLeft < 0) score += 100;
+            else if (hoursLeft < 24) score += 50;
+            else if (hoursLeft < 72) score += 20;
+          }
+        } catch {
+          // Ignore invalid dates
+        }
       }
 
       // Eisenhower Matrix

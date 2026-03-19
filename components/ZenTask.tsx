@@ -16,16 +16,24 @@ interface Props {
 
 export default function ZenTask({ task, onComplete, onSkip }: Props) {
   const { apiKeys, customPrompt, tasks: allTasks, updateTask } = useTaskStore();
-  const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 mins
-  const [isActive, setIsActive] = useState(false);
+  const defaultTime = task.durationMinutes ? task.durationMinutes * 60 : 25 * 60;
+  const [timeLeft, setTimeLeft] = useState(task.timerRemaining ?? defaultTime);
+  const [isActive, setIsActive] = useState(task.timerStatus === 'running');
   const [isBreakingDown, setIsBreakingDown] = useState(false);
   const [newSubtask, setNewSubtask] = useState('');
 
-  // Reset timer when task changes
+  // Sync state from task props (e.g., when updated from another device)
   useEffect(() => {
-    setTimeLeft(25 * 60);
-    setIsActive(false);
-  }, [task.id]);
+    if (task.timerStatus === 'running' && task.timerStartedAt) {
+      const elapsed = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
+      const remaining = Math.max(0, (task.timerRemaining ?? defaultTime) - elapsed);
+      setTimeLeft(remaining);
+      setIsActive(true);
+    } else {
+      setTimeLeft(task.timerRemaining ?? defaultTime);
+      setIsActive(false);
+    }
+  }, [task.timerStatus, task.timerStartedAt, task.timerRemaining, task.id, defaultTime]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -33,17 +41,30 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
       interval = setInterval(() => {
         setTimeLeft((time) => time - 1);
       }, 1000);
-    } else if (timeLeft === 0) {
+    } else if (timeLeft === 0 && isActive) {
       setIsActive(false);
+      updateTask(task.id, { timerStatus: 'idle', timerRemaining: 0 });
       // Play sound or notify
     }
     return () => clearInterval(interval);
-  }, [isActive, timeLeft]);
+  }, [isActive, timeLeft, task.id, updateTask]);
 
-  const toggleTimer = () => setIsActive(!isActive);
+  const toggleTimer = () => {
+    if (isActive) {
+      // Pause
+      updateTask(task.id, { timerStatus: 'paused', timerRemaining: timeLeft });
+    } else {
+      // Start
+      updateTask(task.id, { 
+        timerStatus: 'running', 
+        timerStartedAt: new Date().toISOString(), 
+        timerRemaining: timeLeft 
+      });
+    }
+  };
+
   const resetTimer = () => {
-    setIsActive(false);
-    setTimeLeft(25 * 60);
+    updateTask(task.id, { timerStatus: 'idle', timerRemaining: defaultTime });
   };
 
   const handleComplete = () => {
@@ -89,6 +110,17 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return null;
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleDateString('vi-VN');
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <motion.div
       key={task.id}
@@ -106,9 +138,9 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
         </h1>
         
         <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-          {task.deadline && (
+          {formatDate(task.deadline) && (
             <span className="px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 text-sm font-medium">
-              Hạn: {new Date(task.deadline).toLocaleDateString('vi-VN')}
+              Hạn: {formatDate(task.deadline)}
             </span>
           )}
           <span className="px-3 py-1 rounded-full bg-zinc-800 text-zinc-300 text-sm font-medium">

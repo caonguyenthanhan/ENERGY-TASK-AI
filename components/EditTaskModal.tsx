@@ -12,19 +12,40 @@ interface Props {
 }
 
 export default function EditTaskModal({ task, onClose, onSave }: Props) {
+  const getInitialDeadline = () => {
+    if (!task.deadline) return '';
+    try {
+      const d = new Date(task.deadline);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
   const [title, setTitle] = useState(task.title);
-  const [deadline, setDeadline] = useState(
-    task.deadline ? new Date(task.deadline).toISOString().split('T')[0] : ''
-  );
+  const [deadline, setDeadline] = useState(getInitialDeadline());
   const [status, setStatus] = useState(task.status);
   const [duration, setDuration] = useState(task.durationMinutes);
   const [isImportant, setIsImportant] = useState(task.isImportant);
   const [isUrgent, setIsUrgent] = useState(task.isUrgent);
 
   const handleSave = () => {
+    let parsedDeadline = null;
+    if (deadline) {
+      try {
+        const d = new Date(deadline);
+        if (!isNaN(d.getTime())) {
+          parsedDeadline = d.toISOString();
+        }
+      } catch {
+        parsedDeadline = null;
+      }
+    }
+
     onSave(task.id, {
       title,
-      deadline: deadline ? new Date(deadline).toISOString() : null,
+      deadline: parsedDeadline,
       status,
       durationMinutes: duration,
       isImportant,
