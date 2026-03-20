@@ -174,7 +174,6 @@ export async function breakDownTaskWithAI(
       `,
       config: {
         systemInstruction,
-        tools: [{ googleSearch: {} }],
       },
     });
 

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, X, Send, Mic, MicOff, Volume2, Loader2, AudioLines } from 'lucide-react';
 import { useTaskStore } from '@/lib/store';
 import { chatWithAI, transcribeAudio, generateSpeech, callAIWithRetry } from '@/lib/ai';
-import { Modality } from '@google/genai';
+import { Modality, Type } from '@google/genai';
 
 type Message = {
   id: string;
@@ -15,7 +15,7 @@ type Message = {
 };
 
 export default function ChatBot() {
-  const { apiKeys, customPrompt, tasks } = useTaskStore();
+  const { apiKeys, customPrompt, tasks, addTasks } = useTaskStore();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', role: 'model', text: 'Chào bạn! Mình có thể giúp gì cho bạn hôm nay?' }
@@ -159,7 +159,23 @@ export default function ChatBot() {
               speechConfig: {
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
               },
-              systemInstruction: "Bạn là trợ lý quản lý công việc. Hãy trò chuyện ngắn gọn và thân thiện.",
+              systemInstruction: "Bạn là trợ lý quản lý công việc. Hãy trò chuyện ngắn gọn và thân thiện. Nếu người dùng muốn thêm công việc, hãy gọi hàm addTask.",
+              tools: [{
+                functionDeclarations: [{
+                  name: "addTask",
+                  description: "Thêm một công việc mới vào danh sách công việc của người dùng.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING, description: "Tên công việc" },
+                      durationMinutes: { type: Type.NUMBER, description: "Thời gian dự kiến (phút). Mặc định 30 nếu không rõ." },
+                      isImportant: { type: Type.BOOLEAN, description: "Quan trọng" },
+                      isUrgent: { type: Type.BOOLEAN, description: "Gấp" },
+                    },
+                    required: ["title", "durationMinutes", "isImportant", "isUrgent"],
+                  }
+                }]
+              }],
             },
             callbacks: {
               onopen: () => {
@@ -217,6 +233,34 @@ export default function ChatBot() {
                     source.start();
                   } catch (e) {
                     console.error("Audio playback error", e);
+                  }
+                }
+
+                if (message.toolCall) {
+                  const functionCalls = message.toolCall.functionCalls;
+                  if (functionCalls) {
+                    const functionResponses: any[] = [];
+                    for (const call of functionCalls) {
+                      if (call.name === 'addTask') {
+                        const args = call.args as any;
+                        addTasks([{
+                          title: args.title,
+                          durationMinutes: args.durationMinutes,
+                          isImportant: args.isImportant,
+                          isUrgent: args.isUrgent,
+                          deadline: null,
+                        }]);
+                        functionResponses.push({
+                          id: call.id,
+                          name: call.name,
+                          response: { result: "Task added successfully" }
+                        });
+                        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text: `Đã thêm công việc: ${args.title}` }]);
+                      }
+                    }
+                    if (functionResponses.length > 0) {
+                      sessionPromise.then(session => session.sendToolResponse({ functionResponses }));
+                    }
                   }
                 }
               },
