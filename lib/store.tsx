@@ -20,6 +20,8 @@ export type Task = {
   durationMinutes: number;
   isImportant: boolean;
   isUrgent: boolean;
+  isRoutine?: boolean;
+  resources?: string[];
   subtasks: Subtask[];
   createdAt: string;
   completedAt: string | null;
@@ -43,6 +45,9 @@ type AppState = {
   points: number;
   apiKeys: string[];
   customPrompt: string;
+  backgroundType?: 'color' | 'image' | 'video';
+  backgroundValue?: string;
+  mentalHealth?: number;
 };
 
 const STORAGE_KEY = 'energy_task_ai_state_v2';
@@ -55,6 +60,9 @@ const initialState: AppState = {
   points: 0,
   apiKeys: [],
   customPrompt: '',
+  backgroundType: 'color',
+  backgroundValue: '#f3f4f6', // Tailwind gray-100
+  mentalHealth: 50,
 };
 
 function useTaskStoreInternal() {
@@ -82,8 +90,10 @@ function useTaskStoreInternal() {
             parsed.tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
               ...t,
               subtasks: Array.isArray(t.subtasks) ? t.subtasks : [],
+              resources: Array.isArray(t.resources) ? t.resources : [],
               isImportant: t.isImportant ?? false,
               isUrgent: t.isUrgent ?? false,
+              isRoutine: t.isRoutine ?? false,
             })) : [];
             
             // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -210,6 +220,8 @@ function useTaskStoreInternal() {
 
   const setApiKeys = (keys: string[]) => setState(prev => ({ ...prev, apiKeys: keys }));
   const setCustomPrompt = (prompt: string) => setState(prev => ({ ...prev, customPrompt: prompt }));
+  const setBackground = (type: 'color' | 'image' | 'video', value: string) => setState(prev => ({ ...prev, backgroundType: type, backgroundValue: value }));
+  const setMentalHealth = (value: number) => setState(prev => ({ ...prev, mentalHealth: value }));
   
   const clearAllData = () => {
     setState(initialState);
@@ -365,6 +377,8 @@ function useTaskStoreInternal() {
     setEnergyLevel,
     setApiKeys,
     setCustomPrompt,
+    setBackground,
+    setMentalHealth,
     clearAllData,
     addTasks,
     completeTask,

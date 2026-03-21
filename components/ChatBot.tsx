@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, X, Send, Mic, MicOff, Volume2, Loader2, AudioLines } from 'lucide-react';
+import { MessageSquare, X, Send, Mic, MicOff, Volume2, Loader2, AudioLines, HeartPulse } from 'lucide-react';
 import { useTaskStore } from '@/lib/store';
 import { chatWithAI, transcribeAudio, generateSpeech, callAIWithRetry } from '@/lib/ai';
 import { Modality, Type } from '@google/genai';
@@ -15,7 +15,7 @@ type Message = {
 };
 
 export default function ChatBot() {
-  const { apiKeys, customPrompt, tasks, addTasks } = useTaskStore();
+  const { apiKeys, customPrompt, tasks, addTasks, mentalHealth, setMentalHealth } = useTaskStore();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', role: 'model', text: 'Chào bạn! Mình có thể giúp gì cho bạn hôm nay?' }
@@ -300,9 +300,29 @@ export default function ChatBot() {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="fixed bottom-6 right-6 w-[350px] sm:w-[400px] h-[500px] max-h-[80vh] bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden"
+            className="fixed bottom-6 right-6 w-[350px] sm:w-[400px] flex flex-col gap-2 z-50"
           >
-            {/* Header */}
+            {/* Mental Health Bar */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 shadow-lg flex items-center gap-3 self-end w-full">
+              <HeartPulse className="w-5 h-5 text-rose-500" />
+              <div className="flex-1 flex flex-col gap-1">
+                <div className="flex justify-between text-xs font-medium text-zinc-400">
+                  <span>Sức khỏe tinh thần</span>
+                  <span className="text-rose-400">{mentalHealth || 50}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={mentalHealth || 50} 
+                  onChange={(e) => setMentalHealth(parseInt(e.target.value))}
+                  className="w-full accent-rose-500"
+                />
+              </div>
+            </div>
+
+            <div className="h-[500px] max-h-[80vh] bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+              {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900/50">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center">
@@ -387,6 +407,7 @@ export default function ChatBot() {
                   <Send className="w-5 h-5" />
                 </button>
               </div>
+            </div>
             </div>
           </motion.div>
         )}

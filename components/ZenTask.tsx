@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { v4 as uuidv4 } from 'uuid';
-import { CheckCircle2, XCircle, Play, Pause, RotateCcw, SplitSquareHorizontal, Loader2, Plus, Check, Circle, Sparkles } from 'lucide-react';
+import { CheckCircle2, XCircle, Play, Pause, RotateCcw, SplitSquareHorizontal, Loader2, Plus, Check, Circle, Sparkles, Link as LinkIcon } from 'lucide-react';
 import { Task, useTaskStore } from '@/lib/store';
 import { breakDownTaskWithAI } from '@/lib/ai';
 
@@ -149,6 +149,9 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
     try {
       const d = new Date(dateString);
       if (isNaN(d.getTime())) return null;
+      if (dateString.includes('T')) {
+        return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      }
       return d.toLocaleDateString('vi-VN');
     } catch {
       return null;
@@ -244,8 +247,32 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
         )}
       </div>
 
+      {/* Resources */}
+      {task.resources && task.resources.length > 0 && (
+        <div className="w-full max-w-xl mt-8">
+          <h4 className="text-zinc-300 font-medium mb-4 flex items-center gap-2">
+            <LinkIcon className="w-4 h-4 text-indigo-400" />
+            Tài liệu đính kèm
+          </h4>
+          <div className="flex flex-col gap-2">
+            {task.resources.map((res, idx) => (
+              <a
+                key={idx}
+                href={res.startsWith('http') ? res : `https://${res}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500/50 transition-colors text-sm text-zinc-300 hover:text-indigo-400"
+              >
+                <LinkIcon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{res}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Subtasks */}
-      <div className="w-full max-w-xl mt-12">
+      <div className="w-full max-w-xl mt-8">
         <h4 className="text-zinc-300 font-medium mb-4 flex items-center justify-between">
           <span className="flex items-center gap-2">
             <SplitSquareHorizontal className="w-4 h-4 text-indigo-400" />

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Trophy, RefreshCw, Settings, Database, User, BarChart2 } from 'lucide-react';
+import { Zap, Trophy, RefreshCw, Settings, Database, User, BarChart2, Calendar, Link as LinkIcon } from 'lucide-react';
+import Link from 'next/link';
 import { useTaskStore, Task } from '@/lib/store';
 import EnergyCheckIn from '@/components/EnergyCheckIn';
 import ZenTask from '@/components/ZenTask';
@@ -56,6 +57,9 @@ export default function Home() {
     try {
       const d = new Date(dateString);
       if (isNaN(d.getTime())) return null;
+      if (dateString.includes('T')) {
+        return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      }
       return d.toLocaleDateString('vi-VN');
     } catch {
       return null;
@@ -84,6 +88,10 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
+          <Link href="/schedule" className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors">
+            <Calendar className="w-4 h-4 text-emerald-500" />
+            <span className="text-sm font-medium text-zinc-300">Lịch</span>
+          </Link>
           <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800">
             <Trophy className="w-4 h-4 text-amber-500" />
             <span className="text-sm font-medium text-zinc-300">{points} điểm</span>
@@ -194,8 +202,11 @@ export default function Home() {
                     'bg-zinc-900 border-zinc-800'
                   }`}
                 >
-                  <h4 className={`font-medium text-sm mb-2 ${task.status === 'done' ? 'text-emerald-400 line-through' : 'text-zinc-200'}`}>
-                    {task.title}
+                  <h4 className={`font-medium text-sm mb-2 flex items-start justify-between gap-2 ${task.status === 'done' ? 'text-emerald-400 line-through' : 'text-zinc-200'}`}>
+                    <span className="line-clamp-2">{task.title}</span>
+                    {task.resources && task.resources.length > 0 && (
+                      <LinkIcon className="w-3 h-3 text-indigo-400 shrink-0 mt-1" />
+                    )}
                   </h4>
                   <div className="flex flex-wrap gap-2 text-[11px] text-zinc-500">
                     {formatDate(task.deadline) && (

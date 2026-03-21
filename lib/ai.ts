@@ -6,6 +6,8 @@ export type ParsedTask = {
   durationMinutes: number;
   isImportant: boolean;
   isUrgent: boolean;
+  isRoutine?: boolean;
+  resources?: string[];
 };
 
 export async function callAIWithRetry(apiKeys: string[], callFn: (ai: GoogleGenAI) => Promise<any>) {
@@ -117,9 +119,11 @@ export async function parseTaskWithAI(
       contents: `Phân tích câu nói sau của người dùng và trích xuất các công việc cần làm mới.
       Câu nói: "${input}"
       
-      Nếu không có thời hạn cụ thể, deadline là null.
+      Nếu không có thời hạn cụ thể, deadline là null. Nếu có thời hạn, hãy trả về thời gian chi tiết đến phút (giờ:phút) dưới dạng ISO 8601.
       Nếu không rõ thời lượng, mặc định là 30 phút.
       Đánh giá xem công việc này có Quan trọng (isImportant) và Gấp (isUrgent) hay không theo Ma trận Eisenhower.
+      Đánh giá xem công việc này có phải là việc thường nhật (isRoutine) không (ví dụ: tập thể dục, đọc sách mỗi ngày, dọn dẹp hàng ngày).
+      Nếu người dùng cung cấp bất kỳ đường dẫn (URL) hoặc tài liệu đính kèm nào, hãy trích xuất chúng vào mảng resources.
       
       Hôm nay là ngày: ${new Date().toISOString()}
       ${existingContext}
@@ -133,10 +137,16 @@ export async function parseTaskWithAI(
             type: Type.OBJECT,
             properties: {
               title: { type: Type.STRING, description: "Tên công việc ngắn gọn, rõ ràng." },
-              deadline: { type: Type.STRING, description: "Thời hạn hoàn thành dưới dạng ISO 8601. Trả về null nếu không có." },
+              deadline: { type: Type.STRING, description: "Thời hạn hoàn thành dưới dạng ISO 8601 (bao gồm cả giờ phút nếu có). Trả về null nếu không có." },
               durationMinutes: { type: Type.NUMBER, description: "Thời gian dự kiến (phút)." },
               isImportant: { type: Type.BOOLEAN, description: "Công việc này có quan trọng không?" },
               isUrgent: { type: Type.BOOLEAN, description: "Công việc này có gấp không?" },
+              isRoutine: { type: Type.BOOLEAN, description: "Công việc này có phải là việc thường nhật không?" },
+              resources: { 
+                type: Type.ARRAY, 
+                items: { type: Type.STRING },
+                description: "Danh sách các đường dẫn (URL) tài liệu đính kèm." 
+              },
             },
             required: ["title", "durationMinutes", "isImportant", "isUrgent"],
           },

@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { StoreProvider } from '@/lib/store';
+import AppWrapper from '@/components/AppWrapper';
 
 const inter = Inter({
   subsets: ['latin', 'vietnamese'],
@@ -18,7 +19,9 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
     <html lang="vi" className={`${inter.variable} dark`}>
       <body className="bg-zinc-950 text-zinc-50 font-sans antialiased selection:bg-indigo-500/30 min-h-screen flex flex-col" suppressHydrationWarning>
         <StoreProvider>
-          {children}
+          <AppWrapper>
+            {children}
+          </AppWrapper>
         </StoreProvider>
       </body>
     </html>

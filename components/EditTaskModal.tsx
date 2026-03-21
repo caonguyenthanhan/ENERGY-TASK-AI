@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Calendar, Clock, Activity, AlertCircle, AlertTriangle } from 'lucide-react';
+import { X, Calendar, Clock, Activity, AlertCircle, AlertTriangle, RefreshCw, Link as LinkIcon, Plus, Trash2 } from 'lucide-react';
 import { Task } from '@/lib/store';
 
 interface Props {
@@ -17,7 +17,8 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
     try {
       const d = new Date(task.deadline);
       if (isNaN(d.getTime())) return '';
-      return d.toISOString().split('T')[0];
+      // Return YYYY-MM-DDThh:mm format for datetime-local input
+      return d.toISOString().slice(0, 16);
     } catch {
       return '';
     }
@@ -29,6 +30,20 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
   const [duration, setDuration] = useState(task.durationMinutes);
   const [isImportant, setIsImportant] = useState(task.isImportant);
   const [isUrgent, setIsUrgent] = useState(task.isUrgent);
+  const [isRoutine, setIsRoutine] = useState(task.isRoutine || false);
+  const [resources, setResources] = useState<string[]>(task.resources || []);
+  const [newResource, setNewResource] = useState('');
+
+  const handleAddResource = () => {
+    if (newResource.trim()) {
+      setResources([...resources, newResource.trim()]);
+      setNewResource('');
+    }
+  };
+
+  const handleRemoveResource = (index: number) => {
+    setResources(resources.filter((_, i) => i !== index));
+  };
 
   const handleSave = () => {
     let parsedDeadline = null;
@@ -50,6 +65,8 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
       durationMinutes: duration,
       isImportant,
       isUrgent,
+      isRoutine,
+      resources,
     });
     onClose();
   };
@@ -96,7 +113,7 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
                 <Calendar className="w-4 h-4" /> Hạn chót
               </label>
               <input
-                type="date"
+                type="datetime-local"
                 value={deadline}
                 onChange={e => setDeadline(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 [color-scheme:dark]"
@@ -115,10 +132,10 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <button
               onClick={() => setIsImportant(!isImportant)}
-              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border transition-colors ${
+              className={`flex items-center justify-center gap-2 py-3 px-2 rounded-xl border transition-colors text-sm ${
                 isImportant 
                   ? 'bg-amber-500/10 border-amber-500/50 text-amber-500' 
                   : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700'
@@ -128,7 +145,7 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
             </button>
             <button
               onClick={() => setIsUrgent(!isUrgent)}
-              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border transition-colors ${
+              className={`flex items-center justify-center gap-2 py-3 px-2 rounded-xl border transition-colors text-sm ${
                 isUrgent 
                   ? 'bg-rose-500/10 border-rose-500/50 text-rose-500' 
                   : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700'
@@ -136,6 +153,44 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
             >
               <AlertTriangle className="w-4 h-4" /> Gấp
             </button>
+            <button
+              onClick={() => setIsRoutine(!isRoutine)}
+              className={`flex items-center justify-center gap-2 py-3 px-2 rounded-xl border transition-colors text-sm ${
+                isRoutine 
+                  ? 'bg-blue-500/10 border-blue-500/50 text-blue-400' 
+                  : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700'
+              }`}
+            >
+              <RefreshCw className="w-4 h-4" /> Thường nhật
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-1.5 flex items-center gap-2">
+              <LinkIcon className="w-4 h-4" /> Tài liệu đính kèm (Link/Path)
+            </label>
+            <div className="space-y-2 mb-2">
+              {resources.map((res, idx) => (
+                <div key={idx} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2">
+                  <span className="text-sm text-zinc-300 truncate max-w-[300px]">{res}</span>
+                  <button onClick={() => handleRemoveResource(idx)} className="text-zinc-500 hover:text-rose-400">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={newResource}
+                onChange={e => setNewResource(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddResource()}
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+                placeholder="Thêm link tài liệu..."
+              />
+              <button onClick={handleAddResource} className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-zinc-300">
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div>

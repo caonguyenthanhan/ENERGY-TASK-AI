@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Key, MessageSquare, Trash2, ExternalLink } from 'lucide-react';
+import { X, Key, MessageSquare, Trash2, ExternalLink, Image as ImageIcon, Palette, Video } from 'lucide-react';
 import { useTaskStore } from '@/lib/store';
 
 interface Props {
@@ -10,15 +10,18 @@ interface Props {
 }
 
 export default function SettingsModal({ onClose }: Props) {
-  const { apiKeys, setApiKeys, customPrompt, setCustomPrompt, clearAllData } = useTaskStore();
+  const { apiKeys, setApiKeys, customPrompt, setCustomPrompt, clearAllData, backgroundType, backgroundValue, setBackground } = useTaskStore();
   
   const [keysInput, setKeysInput] = useState(apiKeys.join('\n'));
   const [promptInput, setPromptInput] = useState(customPrompt);
+  const [bgType, setBgType] = useState(backgroundType || 'color');
+  const [bgValue, setBgValue] = useState(backgroundValue || '#f3f4f6');
 
   const handleSave = () => {
     const keys = keysInput.split('\n').map(k => k.trim()).filter(k => k);
     setApiKeys(keys);
     setCustomPrompt(promptInput);
+    setBackground(bgType as any, bgValue);
     onClose();
   };
 
@@ -87,6 +90,73 @@ export default function SettingsModal({ onClose }: Props) {
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 min-h-[100px]"
               placeholder="VD: Bạn là một chuyên gia quản lý thời gian khắt khe dành cho sinh viên..."
             />
+          </div>
+
+          {/* Background Settings */}
+          <div className="pt-6 border-t border-zinc-800">
+            <h3 className="text-sm font-medium text-zinc-300 mb-4 flex items-center gap-2">
+              <ImageIcon className="w-4 h-4" /> Hình nền ứng dụng
+            </h3>
+            
+            <div className="flex gap-4 mb-4">
+              <button 
+                onClick={() => setBgType('color')}
+                className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${bgType === 'color' ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+              >
+                <Palette className="w-4 h-4" /> Màu sắc
+              </button>
+              <button 
+                onClick={() => setBgType('image')}
+                className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${bgType === 'image' ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+              >
+                <ImageIcon className="w-4 h-4" /> Hình ảnh
+              </button>
+              <button 
+                onClick={() => setBgType('video')}
+                className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${bgType === 'video' ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+              >
+                <Video className="w-4 h-4" /> Video
+              </button>
+            </div>
+
+            {bgType === 'color' && (
+              <div className="flex items-center gap-4">
+                <input 
+                  type="color" 
+                  value={bgValue} 
+                  onChange={(e) => setBgValue(e.target.value)}
+                  className="w-12 h-12 rounded cursor-pointer bg-transparent border-0 p-0"
+                />
+                <span className="text-zinc-400 text-sm">{bgValue}</span>
+              </div>
+            )}
+
+            {(bgType === 'image' || bgType === 'video') && (
+              <div>
+                <input 
+                  type="file" 
+                  accept={bgType === 'image' ? "image/*" : "video/mp4,video/webm"}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 5 * 1024 * 1024) {
+                        alert("Vui lòng chọn file nhỏ hơn 5MB để đảm bảo hiệu suất đồng bộ.");
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setBgValue(reader.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="block w-full text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 transition-colors"
+                />
+                {bgValue && bgValue.startsWith('data:') && (
+                  <p className="text-xs text-emerald-500 mt-2">Đã tải lên thành công.</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Danger Zone */}
