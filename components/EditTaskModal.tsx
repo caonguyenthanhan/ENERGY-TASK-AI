@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Calendar, Clock, Activity, AlertCircle, AlertTriangle, RefreshCw, Link as LinkIcon, Plus, Trash2 } from 'lucide-react';
-import { Task } from '@/lib/store';
+import { X, Calendar, Clock, Activity, AlertCircle, AlertTriangle, RefreshCw, Link as LinkIcon, Plus, Trash2, Folder } from 'lucide-react';
+import { Task, useTaskStore } from '@/lib/store';
 
 interface Props {
   task: Task;
@@ -33,6 +33,9 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
   const [isRoutine, setIsRoutine] = useState(task.isRoutine || false);
   const [resources, setResources] = useState<string[]>(task.resources || []);
   const [newResource, setNewResource] = useState('');
+  const [listId, setListId] = useState<string | null>(task.listId || null);
+
+  const { lists } = useTaskStore();
 
   const handleAddResource = () => {
     if (newResource.trim()) {
@@ -67,6 +70,7 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
       isUrgent,
       isRoutine,
       resources,
+      listId,
     });
     onClose();
   };
@@ -191,6 +195,22 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
                 <Plus className="w-5 h-5" />
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-1.5 flex items-center gap-2">
+              <Folder className="w-4 h-4" /> Danh sách
+            </label>
+            <select
+              value={listId || ''}
+              onChange={e => setListId(e.target.value || null)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+            >
+              <option value="">Không có danh sách</option>
+              {lists.map(list => (
+                <option key={list.id} value={list.id}>{list.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>

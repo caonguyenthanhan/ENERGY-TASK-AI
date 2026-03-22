@@ -22,6 +22,8 @@ export type Task = {
   isUrgent: boolean;
   isRoutine?: boolean;
   resources?: string[];
+  listId?: string | null;
+  energyRequired?: EnergyLevel;
   subtasks: Subtask[];
   createdAt: string;
   completedAt: string | null;
@@ -32,21 +34,34 @@ export type Task = {
   timerRemaining?: number;
 };
 
+export type SessionType = 'morning' | 'noon' | 'afternoon' | 'evening' | 'late_night';
+
 export type EnergyRecord = {
   date: string; // YYYY-MM-DD
+  session?: SessionType;
   level: EnergyLevel;
+};
+
+export type TaskList = {
+  id: string;
+  name: string;
 };
 
 type AppState = {
   tasks: Task[];
+  lists: TaskList[];
   energyLevel: EnergyLevel | null;
   lastCheckInDate: string | null;
+  lastCheckInSession: SessionType | null;
   energyHistory: EnergyRecord[];
   points: number;
+  pointGoal: number;
+  pointSettings: { base: number, importantBonus: number, urgentBonus: number };
   apiKeys: string[];
   customPrompt: string;
   backgroundType?: 'color' | 'image' | 'video';
   backgroundValue?: string;
+  backgroundIsPublic?: boolean;
   mentalHealth?: number;
 };
 
@@ -54,14 +69,19 @@ const STORAGE_KEY = 'energy_task_ai_state_v2';
 
 const initialState: AppState = {
   tasks: [],
+  lists: [],
   energyLevel: null,
   lastCheckInDate: null,
+  lastCheckInSession: null,
   energyHistory: [],
   points: 0,
+  pointGoal: 100,
+  pointSettings: { base: 10, importantBonus: 20, urgentBonus: 10 },
   apiKeys: [],
   customPrompt: '',
   backgroundType: 'color',
   backgroundValue: '#f3f4f6', // Tailwind gray-100
+  backgroundIsPublic: false,
   mentalHealth: 50,
 };
 
@@ -81,11 +101,21 @@ function useTaskStoreInternal() {
           const parsed = JSON.parse(stored);
           if (parsed && typeof parsed === 'object') {
             const today = new Date().toDateString();
-            if (parsed.lastCheckInDate !== today) {
+            const currentHour = new Date().getHours();
+            let currentSession: SessionType = 'morning';
+            if (currentHour >= 11 && currentHour < 14) currentSession = 'noon';
+            else if (currentHour >= 14 && currentHour < 18) currentSession = 'afternoon';
+            else if (currentHour >= 18 && currentHour < 22) currentSession = 'evening';
+            else if (currentHour >= 22 || currentHour < 5) currentSession = 'late_night';
+
+            if (parsed.lastCheckInDate !== today || parsed.lastCheckInSession !== currentSession) {
               parsed.energyLevel = null;
             }
             // Ensure arrays exist for older versions
             parsed.apiKeys = Array.isArray(parsed.apiKeys) ? parsed.apiKeys : [];
+            parsed.lists = Array.isArray(parsed.lists) ? parsed.lists : [];
+            parsed.pointSettings = parsed.pointSettings || { base: 10, importantBonus: 20, urgentBonus: 10 };
+            parsed.pointGoal = parsed.pointGoal || 100;
             parsed.customPrompt = typeof parsed.customPrompt === 'string' ? parsed.customPrompt : '';
             parsed.tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
               ...t,
@@ -197,22 +227,23 @@ function useTaskStoreInternal() {
     return () => clearTimeout(timeoutId);
   }, [state, isLoaded, user]);
 
-  const setEnergyLevel = (level: EnergyLevel) => {
+  const setEnergyLevel = (level: EnergyLevel, session: SessionType = 'morning') => {
     setState(prev => {
       const today = new Date().toISOString().split('T')[0];
-      const existingIndex = prev.energyHistory?.findIndex(r => r.date === today) ?? -1;
+      const existingIndex = prev.energyHistory?.findIndex(r => r.date === today && r.session === session) ?? -1;
       let newHistory = prev.energyHistory ? [...prev.energyHistory] : [];
       
       if (existingIndex >= 0) {
-        newHistory[existingIndex] = { date: today, level };
+        newHistory[existingIndex] = { date: today, session, level };
       } else {
-        newHistory.push({ date: today, level });
+        newHistory.push({ date: today, session, level });
       }
 
       return { 
         ...prev, 
         energyLevel: level, 
         lastCheckInDate: new Date().toDateString(),
+        lastCheckInSession: session,
         energyHistory: newHistory
       };
     });
@@ -220,8 +251,18 @@ function useTaskStoreInternal() {
 
   const setApiKeys = (keys: string[]) => setState(prev => ({ ...prev, apiKeys: keys }));
   const setCustomPrompt = (prompt: string) => setState(prev => ({ ...prev, customPrompt: prompt }));
-  const setBackground = (type: 'color' | 'image' | 'video', value: string) => setState(prev => ({ ...prev, backgroundType: type, backgroundValue: value }));
+  const setBackground = (type: 'color' | 'image' | 'video', value: string, isPublic: boolean = false) => setState(prev => ({ ...prev, backgroundType: type, backgroundValue: value, backgroundIsPublic: isPublic }));
   const setMentalHealth = (value: number) => setState(prev => ({ ...prev, mentalHealth: value }));
+  const setPointSettings = (settings: { base: number, importantBonus: number, urgentBonus: number }) => setState(prev => ({ ...prev, pointSettings: settings }));
+  const setPointGoal = (goal: number) => setState(prev => ({ ...prev, pointGoal: goal }));
+
+  const addList = (name: string) => {
+    const newList = { id: uuidv4(), name };
+    setState(prev => ({ ...prev, lists: [...prev.lists, newList] }));
+    return newList.id;
+  };
+  const updateList = (id: string, name: string) => setState(prev => ({ ...prev, lists: prev.lists.map(l => l.id === id ? { ...l, name } : l) }));
+  const deleteList = (id: string) => setState(prev => ({ ...prev, lists: prev.lists.filter(l => l.id !== id), tasks: prev.tasks.map(t => t.listId === id ? { ...t, listId: null } : t) }));
   
   const clearAllData = () => {
     setState(initialState);
@@ -243,9 +284,15 @@ function useTaskStoreInternal() {
   const completeTask = (taskId: string) => {
     setState(prev => {
       const task = prev.tasks.find(t => t.id === taskId);
-      let pointsEarned = 10;
-      if (task?.isImportant) pointsEarned += 20;
-      if (task?.isUrgent) pointsEarned += 10;
+      if (!task || task.status === 'done') return prev;
+
+      let pointsEarned = prev.pointSettings.base;
+      if (task.isImportant) pointsEarned += prev.pointSettings.importantBonus;
+      if (task.isUrgent) pointsEarned += prev.pointSettings.urgentBonus;
+
+      // Bonus points based on mental health and energy level
+      if (prev.mentalHealth && prev.mentalHealth < 40) pointsEarned += 5; // Extra reward when mental health is low
+      if (prev.energyLevel === 'low') pointsEarned += 5; // Extra reward when energy is low
 
       return {
         ...prev,
@@ -265,6 +312,22 @@ function useTaskStoreInternal() {
 
   const updateTask = (taskId: string, updates: Partial<Task>) => {
     setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t) }));
+  };
+
+  const reorderTasks = (sortedTaskIds: string[]) => {
+    setState(prev => {
+      const now = Date.now();
+      const updatedTasks = prev.tasks.map(t => {
+        const index = sortedTaskIds.indexOf(t.id);
+        if (index !== -1) {
+          // The first item should have the newest createdAt
+          // so we subtract index from now
+          return { ...t, createdAt: new Date(now - index * 1000).toISOString() };
+        }
+        return t;
+      });
+      return { ...prev, tasks: updatedTasks };
+    });
   };
 
   const getTopTask = (): Task | null => {
@@ -379,12 +442,18 @@ function useTaskStoreInternal() {
     setCustomPrompt,
     setBackground,
     setMentalHealth,
+    setPointSettings,
+    setPointGoal,
+    addList,
+    updateList,
+    deleteList,
     clearAllData,
     addTasks,
     completeTask,
     skipTask,
     resetSkippedTasks,
     updateTask,
+    reorderTasks,
     getTopTask,
     syncData,
   };

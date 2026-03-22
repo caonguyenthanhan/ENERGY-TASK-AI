@@ -208,3 +208,108 @@ export async function breakDownTaskWithAI(
     }
   });
 }
+
+export async function sortTasksWithAI(
+  tasks: any[],
+  apiKeys: string[],
+  customPrompt: string
+): Promise<string[]> {
+  const systemInstruction = customPrompt || "Bạn là một trợ lý quản lý công việc thông minh, giúp người dùng sắp xếp thứ tự ưu tiên công việc.";
+  
+  return callAIWithRetry(apiKeys, async (ai) => {
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-pro-preview",
+      contents: `Phân tích danh sách công việc sau và sắp xếp chúng theo thứ tự ưu tiên hợp lý nhất (cái nào nên làm trước, cái nào làm sau).
+      Hãy xem xét các yếu tố như: thời hạn (deadline), mức độ quan trọng (isImportant), mức độ gấp (isUrgent), và thời lượng (durationMinutes).
+      
+      Danh sách công việc hiện tại:
+      ${JSON.stringify(tasks.map(t => ({ id: t.id, title: t.title, deadline: t.deadline, isImportant: t.isImportant, isUrgent: t.isUrgent, durationMinutes: t.durationMinutes })))}
+      
+      Trả về kết quả dưới dạng JSON là một mảng chứa ID của các công việc theo thứ tự ưu tiên từ cao xuống thấp.
+      Ví dụ: ["id_task_1", "id_task_3", "id_task_2"]
+      `,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+        }
+      }
+    });
+
+    const jsonStr = response.text?.trim() || "[]";
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => String(item));
+      }
+      return [];
+    } catch (e) {
+      console.error("Failed to parse AI response:", jsonStr);
+      return [];
+    }
+  });
+}
+export async function organizeTasksWithAI(
+  tasks: any[],
+  existingLists: any[],
+  apiKeys: string[],
+  customPrompt: string
+): Promise<{ tasksToUpdate: { taskId: string, listId: string | null }[], newLists: string[] }> {
+  const systemInstruction = customPrompt || "Bạn là một trợ lý quản lý công việc thông minh, giúp người dùng sắp xếp công việc vào các danh sách phù hợp.";
+  
+  return callAIWithRetry(apiKeys, async (ai) => {
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-pro-preview",
+      contents: `Phân tích danh sách công việc sau và nhóm chúng vào các danh sách (list) phù hợp.
+      Bạn có thể sử dụng các danh sách hiện có hoặc tạo danh sách mới nếu cần thiết.
+      Mục tiêu là giúp người dùng quản lý công việc dễ dàng hơn theo dự án, ngữ cảnh, hoặc loại công việc.
+      
+      Danh sách công việc hiện tại:
+      ${JSON.stringify(tasks.map(t => ({ id: t.id, title: t.title, listId: t.listId })))}
+      
+      Danh sách (list) hiện có:
+      ${JSON.stringify(existingLists.map(l => ({ id: l.id, name: l.name })))}
+      
+      Trả về kết quả dưới dạng JSON với cấu trúc sau:
+      {
+        "newLists": ["Tên danh sách mới 1", "Tên danh sách mới 2"],
+        "tasksToUpdate": [
+          { "taskId": "id_của_task", "listId": "id_của_list_hiện_có_hoặc_tên_list_mới" }
+        ]
+      }
+      Lưu ý: Nếu gán vào list mới, hãy dùng chính tên list mới đó làm listId trong tasksToUpdate.
+      `,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            newLists: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Danh sách các tên list mới cần tạo."
+            },
+            tasksToUpdate: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  taskId: { type: Type.STRING },
+                  listId: { type: Type.STRING, description: "ID của list hiện có, hoặc TÊN của list mới (nằm trong mảng newLists)." }
+                },
+                required: ["taskId", "listId"]
+              }
+            }
+          },
+          required: ["newLists", "tasksToUpdate"]
+        }
+      }
+    });
+
+    const jsonStr = response.text?.trim() || "{}";
+    return JSON.parse(jsonStr);
+  });
+}

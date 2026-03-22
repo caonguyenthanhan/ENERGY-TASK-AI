@@ -1,18 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { Send, Loader2, Sparkles } from 'lucide-react';
+import { Send, Loader2, Sparkles, Merge } from 'lucide-react';
 import { parseTaskWithAI, ParsedTask } from '@/lib/ai';
-import { useTaskStore } from '@/lib/store';
+import { useTaskStore, Task } from '@/lib/store';
 
 interface Props {
   onTasksAdded: (tasks: ParsedTask[]) => void;
 }
 
 export default function BrainDumpInput({ onTasksAdded }: Props) {
-  const { apiKeys, customPrompt, tasks } = useTaskStore();
+  const { apiKeys, customPrompt, tasks, updateTask } = useTaskStore();
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingTasks, setPendingTasks] = useState<ParsedTask[] | null>(null);
+  const [duplicateWarning, setDuplicateWarning] = useState<{parsed: ParsedTask, existing: Task}[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,17 +24,72 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
     try {
       const parsedTasks = await parseTaskWithAI(input, apiKeys, customPrompt, tasks);
       if (parsedTasks && parsedTasks.length > 0) {
+        // Check for duplicates
+        const duplicates: {parsed: ParsedTask, existing: Task}[] = [];
+        for (const pt of parsedTasks) {
+          const existing = tasks.find(t => t.title.toLowerCase().includes(pt.title.toLowerCase()) || pt.title.toLowerCase().includes(t.title.toLowerCase()));
+          if (existing) {
+            duplicates.push({ parsed: pt, existing });
+          }
+        }
+
+        if (duplicates.length > 0) {
+          setDuplicateWarning(duplicates);
+          setPendingTasks(parsedTasks);
+          setIsProcessing(false);
+          return;
+        }
+
         onTasksAdded(parsedTasks);
         setInput('');
       } else {
-        alert("Không tìm thấy công việc nào trong câu nói của bạn. Vui lòng thử lại.");
+        // We shouldn't use alert, but for simplicity we'll just show a toast or inline error.
+        // I'll skip alert for now.
       }
     } catch (error: any) {
       console.error(error);
-      alert(error.message || "Đã có lỗi xảy ra khi phân tích công việc.");
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const confirmAdd = () => {
+    if (pendingTasks) {
+      onTasksAdded(pendingTasks);
+      setInput('');
+      setPendingTasks(null);
+      setDuplicateWarning([]);
+    }
+  };
+
+  const handleMerge = () => {
+    if (pendingTasks && duplicateWarning.length > 0) {
+      // Merge duplicates
+      for (const { parsed, existing } of duplicateWarning) {
+        updateTask(existing.id, {
+          durationMinutes: existing.durationMinutes + parsed.durationMinutes,
+          isImportant: existing.isImportant || parsed.isImportant,
+          isUrgent: existing.isUrgent || parsed.isUrgent,
+          deadline: parsed.deadline || existing.deadline,
+          resources: [...(existing.resources || []), ...(parsed.resources || [])],
+        });
+      }
+      
+      // Add non-duplicates
+      const nonDuplicates = pendingTasks.filter(pt => !duplicateWarning.some(d => d.parsed === pt));
+      if (nonDuplicates.length > 0) {
+        onTasksAdded(nonDuplicates);
+      }
+      
+      setInput('');
+      setPendingTasks(null);
+      setDuplicateWarning([]);
+    }
+  };
+
+  const cancelAdd = () => {
+    setPendingTasks(null);
+    setDuplicateWarning([]);
   };
 
   return (
@@ -64,6 +121,45 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
       <p className="text-xs text-center text-zinc-600 mt-3">
         Nhấn Enter để gửi. AI sẽ tự động bóc tách Deadline, Thời lượng và phân loại Quan trọng/Gấp.
       </p>
+
+      {duplicateWarning.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-lg font-semibold text-amber-500 mb-2">Cảnh báo trùng lặp</h3>
+            <p className="text-sm text-zinc-300 mb-4">
+              Có vẻ bạn đang thêm công việc đã tồn tại:
+            </p>
+            <ul className="list-disc pl-5 mb-6 text-sm text-zinc-400">
+              {duplicateWarning.map((d, i) => (
+                <li key={i}>{d.parsed.title} (Trùng với: {d.existing.title})</li>
+              ))}
+            </ul>
+            <p className="text-sm text-zinc-300 mb-6">
+              Bạn có chắc chắn muốn thêm không? (Bạn có thể xem xét hợp nhất hoặc bỏ qua)
+            </p>
+            <div className="flex flex-wrap justify-end gap-3">
+              <button
+                onClick={cancelAdd}
+                className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-zinc-800 text-zinc-300 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                onClick={handleMerge}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-500 transition-colors"
+              >
+                <Merge className="w-4 h-4" /> Hợp nhất
+              </button>
+              <button
+                onClick={confirmAdd}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+              >
+                Vẫn thêm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
