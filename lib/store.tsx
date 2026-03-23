@@ -825,6 +825,7 @@ function useTaskStoreInternal() {
       let moodBonus = 0;
       const mood = state.mood ?? null;
       let ivyLeeRank: number | undefined = undefined;
+      let overdueHours: number | undefined = undefined;
       
       if (task.deadline) {
         try {
@@ -832,7 +833,11 @@ function useTaskStoreInternal() {
           if (!isNaN(d.getTime())) {
             const deadlineTime = d.getTime();
             const hoursLeft = (deadlineTime - now) / (1000 * 60 * 60);
-            if (hoursLeft < 0) score += 100;
+            if (hoursLeft < 0) {
+              overdueHours = Math.round(-hoursLeft);
+              const daysOverdue = Math.floor((overdueHours || 0) / 24);
+              score += 100 + Math.min(120, daysOverdue * 20);
+            }
             else if (hoursLeft < 24) score += 50;
             else if (hoursLeft < 72) score += 20;
           }
@@ -885,7 +890,7 @@ function useTaskStoreInternal() {
         if (idx >= 0) ivyLeeRank = idx + 1;
       }
 
-      return { ...task, score, scoreBreakdown: { chronotypeBonus, chronotypeFit, moodBonus, mood, ivyLeeRank } };
+      return { ...task, score, scoreBreakdown: { chronotypeBonus, chronotypeFit, moodBonus, mood, ivyLeeRank, overdueHours } };
     });
 
     scoredTasks.sort((a, b) => (b.score || 0) - (a.score || 0));

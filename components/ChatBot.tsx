@@ -15,7 +15,7 @@ type Message = {
 };
 
 export default function ChatBot() {
-  const { apiKeys, customPrompt, tasks, addTasks, mentalHealth, setMentalHealth, chronotype, energyLevel, getLatestWeeklyReview } = useTaskStore();
+  const { apiKeys, customPrompt, tasks, addTasks, mentalHealth, setMentalHealth, chronotype, energyLevel, mood, getLatestWeeklyReview } = useTaskStore();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', role: 'model', text: 'Chào bạn! Mình có thể giúp gì cho bạn hôm nay?' }
@@ -38,6 +38,23 @@ export default function ChatBot() {
     scrollToBottom();
   }, [messages, isTyping]);
 
+  const getExtraContext = () => {
+    const latestWeekly = getLatestWeeklyReview();
+    const chronotypeLabel = chronotype === 'lion' ? 'Sư tử' : chronotype === 'bear' ? 'Gấu' : chronotype === 'wolf' ? 'Sói' : chronotype === 'dolphin' ? 'Cá heo' : null;
+    const moodLabel = mood === 'excited' ? 'Hưng phấn' : mood === 'neutral' ? 'Bình thường' : mood === 'anxious' ? 'Lo âu' : mood === 'sad' ? 'Buồn' : mood === 'angry' ? 'Tức giận' : null;
+    
+    const contextArr = [
+      chronotypeLabel ? `Chronotype (Nhịp sinh học): ${chronotypeLabel}` : '',
+      energyLevel ? `Năng lượng hiện tại: ${energyLevel}` : '',
+      moodLabel ? `Tâm trạng hiện tại: ${moodLabel}` : '',
+      typeof mentalHealth === 'number' ? `Sức khoẻ tinh thần: ${mentalHealth}%` : '',
+      latestWeekly ? `Đánh giá tuần (bắt đầu ${latestWeekly.weekStart}): sức khoẻ ${latestWeekly.healthPercent}%, tâm lý ${latestWeekly.mentalPercent}%. Tuần qua: ${latestWeekly.lastWeekNote || '(trống)'}. Tuần tới: ${latestWeekly.nextWeekNote || '(trống)'}.` : '',
+    ].filter(Boolean);
+
+    if (contextArr.length === 0) return '';
+    return contextArr.join('\n') + '\n\nLưu ý quan trọng: KHÔNG ĐƯỢC hỏi lại người dùng về nhịp sinh học, năng lượng, tâm trạng hay sức khỏe tinh thần vì hệ thống đã tự động cung cấp ở trên. Hãy trực tiếp sử dụng thông tin này để tư vấn.';
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isTyping || isLiveMode) return;
 
@@ -48,14 +65,7 @@ export default function ChatBot() {
 
     try {
       const history = messages.map(m => ({ role: m.role, text: m.text }));
-      const latestWeekly = getLatestWeeklyReview();
-      const chronotypeLabel = chronotype === 'lion' ? 'Sư tử' : chronotype === 'bear' ? 'Gấu' : chronotype === 'wolf' ? 'Sói' : chronotype === 'dolphin' ? 'Cá heo' : null;
-      const extraContext = [
-        chronotypeLabel ? `Chronotype: ${chronotypeLabel}` : '',
-        energyLevel ? `Năng lượng hôm nay: ${energyLevel}` : '',
-        typeof mentalHealth === 'number' ? `Sức khoẻ tinh thần hiện tại: ${mentalHealth}%` : '',
-        latestWeekly ? `Đánh giá tuần (bắt đầu ${latestWeekly.weekStart}): sức khoẻ ${latestWeekly.healthPercent}%, tâm lý ${latestWeekly.mentalPercent}%. Tuần qua: ${latestWeekly.lastWeekNote || '(trống)'}. Tuần tới: ${latestWeekly.nextWeekNote || '(trống)'}.` : '',
-      ].filter(Boolean).join('\n');
+      const extraContext = getExtraContext();
 
       const response = await chatWithAI(userMsg.text, history, apiKeys, customPrompt, tasks, extraContext);
       
@@ -161,6 +171,10 @@ export default function ChatBot() {
         processor.connect(audioContextRef.current.destination);
 
         await callAIWithRetry(apiKeys, async (ai) => {
+          const extraContext = getExtraContext();
+          const baseInstruction = "Bạn là trợ lý quản lý công việc. Hãy trò chuyện ngắn gọn và thân thiện. Nếu người dùng muốn thêm công việc, hãy gọi hàm addTask.";
+          const finalInstruction = extraContext ? `${baseInstruction}\n\nThông tin người dùng:\n${extraContext}` : baseInstruction;
+
           const sessionPromise = ai.live.connect({
             model: "gemini-2.5-flash-native-audio-preview-12-2025",
             config: {
@@ -168,7 +182,7 @@ export default function ChatBot() {
               speechConfig: {
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
               },
-              systemInstruction: "Bạn là trợ lý quản lý công việc. Hãy trò chuyện ngắn gọn và thân thiện. Nếu người dùng muốn thêm công việc, hãy gọi hàm addTask.",
+              systemInstruction: finalInstruction,
               tools: [{
                 functionDeclarations: [{
                   name: "addTask",
