@@ -13,7 +13,6 @@
     "@google/genai": "^1.17.0",
     "@hookform/resolvers": "^5.2.1",
     "@supabase/supabase-js": "^2.99.3",
-    "@types/react-window": "^1.8.8",
     "autoprefixer": "^10.4.21",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
@@ -26,7 +25,6 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-use-measure": "^2.1.7",
-    "react-window": "^1.8.10",
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.3.1",
     "uuid": "^13.0.0"
