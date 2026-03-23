@@ -9,6 +9,8 @@ export type EnergyLevel = 'high' | 'normal' | 'low';
 
 export type Chronotype = 'lion' | 'bear' | 'wolf' | 'dolphin';
 
+export type Mood = 'excited' | 'neutral' | 'anxious' | 'sad' | 'angry';
+
 export type Subtask = {
   id: string;
   title: string;
@@ -22,6 +24,20 @@ export type WeeklyReview = {
   lastWeekNote: string;
   nextWeekNote: string;
   createdAt: string;
+};
+
+export type MoodRecord = {
+  date: string;
+  mood: Mood;
+};
+
+export type MorningAdherenceRecord = {
+  date: string;
+  completed: string[];
+};
+
+export type MorningProtocolPrefs = {
+  enabled: boolean;
 };
 
 export type Task = {
@@ -43,6 +59,8 @@ export type Task = {
   scoreBreakdown?: {
     chronotypeBonus?: number;
     chronotypeFit?: boolean;
+    moodBonus?: number;
+    mood?: Mood | null;
   };
   timerStatus?: 'idle' | 'running' | 'paused';
   timerStartedAt?: string | null;
@@ -69,6 +87,9 @@ type AppState = {
   lastCheckInDate: string | null;
   lastCheckInSession: SessionType | null;
   energyHistory: EnergyRecord[];
+  mood: Mood | null;
+  lastMoodDate: string | null;
+  moodHistory: MoodRecord[];
   points: number;
   pointGoal: number;
   pointSettings: { base: number, importantBonus: number, urgentBonus: number };
@@ -77,6 +98,8 @@ type AppState = {
   chronotype: Chronotype | null;
   chronotypeUpdatedAt: string | null;
   weeklyReviews: WeeklyReview[];
+  morningProtocolPrefs: MorningProtocolPrefs;
+  morningAdherenceHistory: MorningAdherenceRecord[];
   backgroundType?: 'color' | 'image' | 'video';
   backgroundValue?: string;
   backgroundIsPublic?: boolean;
@@ -166,6 +189,12 @@ function normalizeUpdatedAt(value: unknown): string | null {
   return d.toISOString();
 }
 
+function normalizeMood(value: unknown): Mood | null {
+  if (value === null || value === undefined) return null;
+  if (value === 'excited' || value === 'neutral' || value === 'anxious' || value === 'sad' || value === 'angry') return value;
+  return null;
+}
+
 function clamp01(value: unknown, fallback: number): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -208,6 +237,9 @@ const initialState: AppState = {
   lastCheckInDate: null,
   lastCheckInSession: null,
   energyHistory: [],
+  mood: null,
+  lastMoodDate: null,
+  moodHistory: [],
   points: 0,
   pointGoal: 100,
   pointSettings: { base: 10, importantBonus: 20, urgentBonus: 10 },
@@ -216,6 +248,8 @@ const initialState: AppState = {
   chronotype: null,
   chronotypeUpdatedAt: null,
   weeklyReviews: [],
+  morningProtocolPrefs: { enabled: true },
+  morningAdherenceHistory: [],
   backgroundType: 'color',
   backgroundValue: '#f3f4f6', // Tailwind gray-100
   backgroundIsPublic: false,
@@ -257,6 +291,14 @@ function useTaskStoreInternal() {
             parsed.customPrompt = typeof parsed.customPrompt === 'string' ? parsed.customPrompt : '';
             parsed.chronotype = normalizeChronotype(parsed.chronotype);
             parsed.chronotypeUpdatedAt = normalizeUpdatedAt(parsed.chronotypeUpdatedAt);
+            const todayISO = new Date().toISOString().split('T')[0];
+            parsed.lastMoodDate = typeof parsed.lastMoodDate === 'string' ? parsed.lastMoodDate : null;
+            parsed.mood = normalizeMood(parsed.mood);
+            if (parsed.lastMoodDate !== todayISO) parsed.mood = null;
+            parsed.moodHistory = Array.isArray(parsed.moodHistory) ? parsed.moodHistory.map((r: any) => ({
+              date: typeof r?.date === 'string' ? r.date : todayISO,
+              mood: normalizeMood(r?.mood) ?? 'neutral',
+            })).filter((r: any) => typeof r?.date === 'string' && typeof r?.mood === 'string') : [];
             parsed.weeklyReviews = Array.isArray(parsed.weeklyReviews) ? parsed.weeklyReviews.map((r: any) => ({
               weekStart: typeof r?.weekStart === 'string' ? r.weekStart : getWeekStartISO(),
               healthPercent: Math.max(0, Math.min(100, Number(r?.healthPercent ?? 50))),
@@ -264,6 +306,13 @@ function useTaskStoreInternal() {
               lastWeekNote: typeof r?.lastWeekNote === 'string' ? r.lastWeekNote : '',
               nextWeekNote: typeof r?.nextWeekNote === 'string' ? r.nextWeekNote : '',
               createdAt: typeof r?.createdAt === 'string' ? r.createdAt : new Date().toISOString(),
+            })) : [];
+            parsed.morningProtocolPrefs = parsed.morningProtocolPrefs && typeof parsed.morningProtocolPrefs === 'object'
+              ? { enabled: Boolean((parsed.morningProtocolPrefs as any).enabled ?? true) }
+              : { enabled: true };
+            parsed.morningAdherenceHistory = Array.isArray(parsed.morningAdherenceHistory) ? parsed.morningAdherenceHistory.map((r: any) => ({
+              date: typeof r?.date === 'string' ? r.date : todayISO,
+              completed: Array.isArray(r?.completed) ? r.completed.map((x: any) => String(x)).filter(Boolean) : [],
             })) : [];
             parsed.backgroundOverlayOpacity = clamp01(parsed.backgroundOverlayOpacity, 0.7);
             parsed.tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
@@ -401,6 +450,20 @@ function useTaskStoreInternal() {
     });
   };
 
+  const setMood = (mood: Mood | null) => {
+    setState(prev => {
+      const todayISO = new Date().toISOString().split('T')[0];
+      const moodHistory = Array.isArray(prev.moodHistory) ? [...prev.moodHistory] : [];
+      const idx = moodHistory.findIndex(r => r.date === todayISO);
+      if (mood) {
+        const nextRecord: MoodRecord = { date: todayISO, mood };
+        if (idx >= 0) moodHistory[idx] = nextRecord;
+        else moodHistory.push(nextRecord);
+      }
+      return { ...prev, mood, lastMoodDate: todayISO, moodHistory };
+    });
+  };
+
   const setApiKeys = (keys: string[]) => setState(prev => ({ ...prev, apiKeys: keys }));
   const setCustomPrompt = (prompt: string) => setState(prev => ({ ...prev, customPrompt: prompt }));
   const setChronotype = (chronotype: Chronotype | null) => setState(prev => ({ ...prev, chronotype, chronotypeUpdatedAt: new Date().toISOString() }));
@@ -491,6 +554,27 @@ function useTaskStoreInternal() {
     });
   };
 
+  const toggleMorningProtocolItem = (itemId: string) => {
+    setState(prev => {
+      const todayISO = new Date().toISOString().split('T')[0];
+      const history = Array.isArray(prev.morningAdherenceHistory) ? [...prev.morningAdherenceHistory] : [];
+      const idx = history.findIndex(r => r.date === todayISO);
+      const current = idx >= 0 ? history[idx] : { date: todayISO, completed: [] };
+      const set = new Set(current.completed);
+      if (set.has(itemId)) set.delete(itemId);
+      else set.add(itemId);
+      const next: MorningAdherenceRecord = { date: todayISO, completed: Array.from(set) };
+      if (idx >= 0) history[idx] = next;
+      else history.push(next);
+      return { ...prev, morningAdherenceHistory: history };
+    });
+  };
+
+  const getMorningAdherenceForToday = () => {
+    const todayISO = new Date().toISOString().split('T')[0];
+    return state.morningAdherenceHistory.find(r => r.date === todayISO) || { date: todayISO, completed: [] };
+  };
+
   const upsertWeeklyReview = (payload: Omit<WeeklyReview, 'createdAt'>) => {
     setState(prev => {
       const next: WeeklyReview = {
@@ -530,6 +614,8 @@ function useTaskStoreInternal() {
       const now = new Date().getTime();
       let chronotypeBonus = 0;
       let chronotypeFit: boolean | undefined = undefined;
+      let moodBonus = 0;
+      const mood = state.mood ?? null;
       
       if (task.deadline) {
         try {
@@ -567,7 +653,25 @@ function useTaskStoreInternal() {
         score += chronotypeBonus;
       }
 
-      return { ...task, score, scoreBreakdown: { chronotypeBonus, chronotypeFit } };
+      if (mood) {
+        const title = (task.title || '').toLowerCase();
+        const hasAny = (keys: string[]) => keys.some(k => title.includes(k));
+        if (mood === 'anxious' || mood === 'sad') {
+          if (task.isUrgent || hasAny(['review', 'kiểm', 'check', 'soát', 'audit', 'đối chiếu', 'phân tích', 'analysis', 'tính', 'calc'])) moodBonus += 15;
+          if (task.durationMinutes <= 30) moodBonus += 5;
+        } else if (mood === 'excited') {
+          if (hasAny(['brainstorm', 'design', 'viết', 'write', 'idea', 'ý tưởng', 'sáng tạo', 'meet', 'call', 'gặp', 'trao đổi'])) moodBonus += 15;
+          if (task.isImportant && !task.isUrgent) moodBonus += 5;
+        } else if (mood === 'angry') {
+          if (task.isUrgent) moodBonus += 10;
+          if (task.durationMinutes <= 20) moodBonus += 5;
+        } else if (mood === 'neutral') {
+          moodBonus += 0;
+        }
+        score += moodBonus;
+      }
+
+      return { ...task, score, scoreBreakdown: { chronotypeBonus, chronotypeFit, moodBonus, mood } };
     });
 
     scoredTasks.sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -637,6 +741,7 @@ function useTaskStoreInternal() {
     isLoaded,
     isSyncing,
     setEnergyLevel,
+    setMood,
     setApiKeys,
     setCustomPrompt,
     setChronotype,
@@ -655,6 +760,8 @@ function useTaskStoreInternal() {
     resetSkippedTasks,
     updateTask,
     reorderTasks,
+    toggleMorningProtocolItem,
+    getMorningAdherenceForToday,
     upsertWeeklyReview,
     hasWeeklyReviewForCurrentWeek,
     getLatestWeeklyReview,

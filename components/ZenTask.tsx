@@ -56,6 +56,8 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
   const [showTimerComplete, setShowTimerComplete] = useState(false);
   const chronoBonus = task.scoreBreakdown?.chronotypeBonus ?? 0;
   const chronoFit = task.scoreBreakdown?.chronotypeFit;
+  const moodBonus = task.scoreBreakdown?.moodBonus ?? 0;
+  const mood = task.scoreBreakdown?.mood ?? null;
 
   const chronotypeLabel = () => {
     if (!chronotype) return null;
@@ -63,6 +65,15 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
     if (chronotype === 'bear') return 'Gấu';
     if (chronotype === 'wolf') return 'Sói';
     return 'Cá heo';
+  };
+
+  const moodLabel = () => {
+    if (!mood) return null;
+    if (mood === 'excited') return 'Hưng phấn';
+    if (mood === 'neutral') return 'Bình thường';
+    if (mood === 'anxious') return 'Lo âu';
+    if (mood === 'sad') return 'Buồn';
+    return 'Tức giận';
   };
 
   // Sync state from task props (e.g., when updated from another device)
@@ -211,6 +222,11 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
           {chronotype && chronoBonus === 0 && chronoFit === false && (
             <span className="px-3 py-1 rounded-full bg-zinc-800 text-zinc-400 text-sm font-medium">
               Ngoài cửa sổ ({chronotypeLabel()})
+            </span>
+          )}
+          {mood && moodBonus > 0 && (
+            <span className="px-3 py-1 rounded-full bg-fuchsia-500/10 text-fuchsia-300 text-sm font-medium">
+              Cảm xúc ({moodLabel()}) +{moodBonus}
             </span>
           )}
         </div>
