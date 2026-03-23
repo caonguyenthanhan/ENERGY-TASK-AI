@@ -7,6 +7,8 @@ import { supabase } from './supabase';
 
 export type EnergyLevel = 'high' | 'normal' | 'low';
 
+export type Chronotype = 'lion' | 'bear' | 'wolf' | 'dolphin';
+
 export type Subtask = {
   id: string;
   title: string;
@@ -29,6 +31,10 @@ export type Task = {
   completedAt: string | null;
   status: 'todo' | 'done' | 'skipped';
   score?: number;
+  scoreBreakdown?: {
+    chronotypeBonus?: number;
+    chronotypeFit?: boolean;
+  };
   timerStatus?: 'idle' | 'running' | 'paused';
   timerStartedAt?: string | null;
   timerRemaining?: number;
@@ -59,6 +65,8 @@ type AppState = {
   pointSettings: { base: number, importantBonus: number, urgentBonus: number };
   apiKeys: string[];
   customPrompt: string;
+  chronotype: Chronotype | null;
+  chronotypeUpdatedAt: string | null;
   backgroundType?: 'color' | 'image' | 'video';
   backgroundValue?: string;
   backgroundIsPublic?: boolean;
@@ -131,6 +139,40 @@ function normalizeTaskPatch(patch: Partial<Task>): Partial<Task> {
   return out;
 }
 
+function normalizeChronotype(value: unknown): Chronotype | null {
+  if (value === null || value === undefined) return null;
+  if (value === 'lion' || value === 'bear' || value === 'wolf' || value === 'dolphin') return value;
+  return null;
+}
+
+function normalizeUpdatedAt(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  if (!s) return null;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function getChronotypeFitNow(chronotype: Chronotype): { fit: boolean; windowLabel: string } {
+  const hour = new Date().getHours();
+  if (chronotype === 'lion') {
+    const fit = hour >= 5 && hour < 12;
+    return { fit, windowLabel: '05:00–12:00' };
+  }
+  if (chronotype === 'bear') {
+    const fit = hour >= 9 && hour < 15;
+    return { fit, windowLabel: '09:00–15:00' };
+  }
+  if (chronotype === 'wolf') {
+    const fit = hour >= 12 && hour < 21;
+    return { fit, windowLabel: '12:00–21:00' };
+  }
+  const fit = (hour >= 10 && hour < 12) || (hour >= 14 && hour < 16);
+  return { fit, windowLabel: '10:00–12:00, 14:00–16:00' };
+}
+
 const initialState: AppState = {
   tasks: [],
   lists: [],
@@ -143,6 +185,8 @@ const initialState: AppState = {
   pointSettings: { base: 10, importantBonus: 20, urgentBonus: 10 },
   apiKeys: [],
   customPrompt: '',
+  chronotype: null,
+  chronotypeUpdatedAt: null,
   backgroundType: 'color',
   backgroundValue: '#f3f4f6', // Tailwind gray-100
   backgroundIsPublic: false,
@@ -181,6 +225,8 @@ function useTaskStoreInternal() {
             parsed.pointSettings = parsed.pointSettings || { base: 10, importantBonus: 20, urgentBonus: 10 };
             parsed.pointGoal = parsed.pointGoal || 100;
             parsed.customPrompt = typeof parsed.customPrompt === 'string' ? parsed.customPrompt : '';
+            parsed.chronotype = normalizeChronotype(parsed.chronotype);
+            parsed.chronotypeUpdatedAt = normalizeUpdatedAt(parsed.chronotypeUpdatedAt);
             parsed.tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
               ...t,
               title: typeof t.title === 'string' ? t.title : 'Công việc không tên',
@@ -318,6 +364,7 @@ function useTaskStoreInternal() {
 
   const setApiKeys = (keys: string[]) => setState(prev => ({ ...prev, apiKeys: keys }));
   const setCustomPrompt = (prompt: string) => setState(prev => ({ ...prev, customPrompt: prompt }));
+  const setChronotype = (chronotype: Chronotype | null) => setState(prev => ({ ...prev, chronotype, chronotypeUpdatedAt: new Date().toISOString() }));
   const setBackground = (type: 'color' | 'image' | 'video', value: string, isPublic: boolean = false) => setState(prev => ({ ...prev, backgroundType: type, backgroundValue: value, backgroundIsPublic: isPublic }));
   const setMentalHealth = (value: number) => setState(prev => ({ ...prev, mentalHealth: value }));
   const setPointSettings = (settings: { base: number, importantBonus: number, urgentBonus: number }) => setState(prev => ({ ...prev, pointSettings: settings }));
@@ -412,6 +459,8 @@ function useTaskStoreInternal() {
     const scoredTasks = activeTasks.map(task => {
       let score = 0;
       const now = new Date().getTime();
+      let chronotypeBonus = 0;
+      let chronotypeFit: boolean | undefined = undefined;
       
       if (task.deadline) {
         try {
@@ -442,7 +491,14 @@ function useTaskStoreInternal() {
         if (task.isUrgent && !task.isImportant) score += 20;
       }
 
-      return { ...task, score };
+      if (state.chronotype) {
+        const fitNow = getChronotypeFitNow(state.chronotype);
+        chronotypeFit = fitNow.fit;
+        if (fitNow.fit) chronotypeBonus = task.isImportant ? 25 : 10;
+        score += chronotypeBonus;
+      }
+
+      return { ...task, score, scoreBreakdown: { chronotypeBonus, chronotypeFit } };
     });
 
     scoredTasks.sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -514,6 +570,7 @@ function useTaskStoreInternal() {
     setEnergyLevel,
     setApiKeys,
     setCustomPrompt,
+    setChronotype,
     setBackground,
     setMentalHealth,
     setPointSettings,

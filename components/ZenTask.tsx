@@ -47,13 +47,23 @@ interface Props {
 }
 
 export default function ZenTask({ task, onComplete, onSkip }: Props) {
-  const { apiKeys, customPrompt, tasks: allTasks, updateTask } = useTaskStore();
+  const { apiKeys, customPrompt, tasks: allTasks, updateTask, chronotype } = useTaskStore();
   const defaultTime = task.durationMinutes ? task.durationMinutes * 60 : 25 * 60;
   const [timeLeft, setTimeLeft] = useState(task.timerRemaining ?? defaultTime);
   const [isActive, setIsActive] = useState(task.timerStatus === 'running');
   const [isBreakingDown, setIsBreakingDown] = useState(false);
   const [newSubtask, setNewSubtask] = useState('');
   const [showTimerComplete, setShowTimerComplete] = useState(false);
+  const chronoBonus = task.scoreBreakdown?.chronotypeBonus ?? 0;
+  const chronoFit = task.scoreBreakdown?.chronotypeFit;
+
+  const chronotypeLabel = () => {
+    if (!chronotype) return null;
+    if (chronotype === 'lion') return 'Sư tử';
+    if (chronotype === 'bear') return 'Gấu';
+    if (chronotype === 'wolf') return 'Sói';
+    return 'Cá heo';
+  };
 
   // Sync state from task props (e.g., when updated from another device)
   useEffect(() => {
@@ -191,6 +201,16 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
           {task.isUrgent && (
             <span className="px-3 py-1 rounded-full bg-rose-500/10 text-rose-500 text-sm font-medium">
               Gấp
+            </span>
+          )}
+          {chronotype && chronoBonus > 0 && (
+            <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-300 text-sm font-medium">
+              Nhịp sinh học +{chronoBonus}
+            </span>
+          )}
+          {chronotype && chronoBonus === 0 && chronoFit === false && (
+            <span className="px-3 py-1 rounded-full bg-zinc-800 text-zinc-400 text-sm font-medium">
+              Ngoài cửa sổ ({chronotypeLabel()})
             </span>
           )}
         </div>
