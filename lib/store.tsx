@@ -122,6 +122,7 @@ type AppState = {
   backgroundValue?: string;
   backgroundIsPublic?: boolean;
   backgroundOverlayOpacity: number;
+  backgroundOverlayColor: string;
   mentalHealth?: number;
 };
 
@@ -235,6 +236,22 @@ function clamp01(value: unknown, fallback: number): number {
   return n;
 }
 
+function normalizeOverlayColor(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  const s = value.trim();
+  if (!s) return fallback;
+  const hex3 = /^#([0-9a-fA-F]{3})$/;
+  const hex6 = /^#([0-9a-fA-F]{6})$/;
+  const m3 = s.match(hex3);
+  if (m3) {
+    const [r, g, b] = m3[1].split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  const m6 = s.match(hex6);
+  if (m6) return `#${m6[1].toLowerCase()}`;
+  return fallback;
+}
+
 function getWeekStartISO(date: Date = new Date()): string {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -288,6 +305,7 @@ const initialState: AppState = {
   backgroundValue: '#f3f4f6', // Tailwind gray-100
   backgroundIsPublic: false,
   backgroundOverlayOpacity: 0.7,
+  backgroundOverlayColor: '#000000',
   mentalHealth: 50,
 };
 
@@ -357,6 +375,7 @@ function useTaskStoreInternal() {
               completed: Array.isArray(r?.completed) ? r.completed.map((x: any) => String(x)).filter(Boolean) : [],
             })) : [];
             parsed.backgroundOverlayOpacity = clamp01(parsed.backgroundOverlayOpacity, 0.7);
+            parsed.backgroundOverlayColor = normalizeOverlayColor(parsed.backgroundOverlayColor, '#000000');
             parsed.tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
               ...t,
               title: typeof t.title === 'string' ? t.title : 'Công việc không tên',
@@ -514,6 +533,7 @@ function useTaskStoreInternal() {
   const setChronotype = (chronotype: Chronotype | null) => setState(prev => ({ ...prev, chronotype, chronotypeUpdatedAt: new Date().toISOString() }));
   const setBackground = (type: 'color' | 'image' | 'video', value: string, isPublic: boolean = false) => setState(prev => ({ ...prev, backgroundType: type, backgroundValue: value, backgroundIsPublic: isPublic }));
   const setBackgroundOverlayOpacity = (opacity: number) => setState(prev => ({ ...prev, backgroundOverlayOpacity: clamp01(opacity, prev.backgroundOverlayOpacity) }));
+  const setBackgroundOverlayColor = (color: string) => setState(prev => ({ ...prev, backgroundOverlayColor: normalizeOverlayColor(color, prev.backgroundOverlayColor) }));
   const setMentalHealth = (value: number) => setState(prev => ({ ...prev, mentalHealth: value }));
   const setPointSettings = (settings: { base: number, importantBonus: number, urgentBonus: number }) => setState(prev => ({ ...prev, pointSettings: settings }));
   const setPointGoal = (goal: number) => setState(prev => ({ ...prev, pointGoal: goal }));
@@ -934,6 +954,7 @@ function useTaskStoreInternal() {
     ...state,
     isLoaded,
     isSyncing,
+    user,
     setEnergyLevel,
     setMood,
     setApiKeys,
@@ -941,6 +962,7 @@ function useTaskStoreInternal() {
     setChronotype,
     setBackground,
     setBackgroundOverlayOpacity,
+    setBackgroundOverlayColor,
     setMentalHealth,
     setPointSettings,
     setPointGoal,

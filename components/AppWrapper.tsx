@@ -2,29 +2,36 @@
 
 import { useTaskStore } from '@/lib/store';
 import { ReactNode } from 'react';
+import { isFeatureUnlocked } from '@/lib/features';
 
 export default function AppWrapper({ children }: { children: ReactNode }) {
-  const { backgroundType, backgroundValue, backgroundOverlayOpacity } = useTaskStore();
+  const { backgroundType, backgroundValue, backgroundOverlayOpacity, backgroundOverlayColor, points, user } = useTaskStore();
+  const email = user?.email as string | undefined;
+  const backgroundMediaEnabled = isFeatureUnlocked({ feature: 'backgroundMedia', points, email });
+  const effectiveType = backgroundType === 'color' ? 'color' : (backgroundMediaEnabled ? backgroundType : 'color');
+  const effectiveValue = effectiveType === 'color'
+    ? (backgroundType === 'color' ? backgroundValue : '#09090b')
+    : backgroundValue;
 
   return (
     <div className="relative min-h-screen flex flex-col w-full h-full">
       <div 
         className="fixed inset-0 z-[-1] transition-all duration-500"
         style={{
-          backgroundColor: backgroundType === 'color' ? backgroundValue : 'transparent',
+          backgroundColor: effectiveType === 'color' ? effectiveValue : 'transparent',
         }}
       >
-        {backgroundType === 'image' && backgroundValue && (
+        {effectiveType === 'image' && effectiveValue && (
           <img
-            src={backgroundValue}
+            src={effectiveValue}
             alt="Background"
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
           />
         )}
-        {backgroundType === 'video' && backgroundValue && (
+        {effectiveType === 'video' && effectiveValue && (
           <video 
-            src={backgroundValue} 
+            src={effectiveValue} 
             autoPlay 
             loop 
             muted 
@@ -32,10 +39,10 @@ export default function AppWrapper({ children }: { children: ReactNode }) {
             className="w-full h-full object-cover"
           />
         )}
-        {(backgroundType === 'image' || backgroundType === 'video') && (
+        {(effectiveType === 'image' || effectiveType === 'video') && (
           <div
-            className="absolute inset-0 bg-black"
-            style={{ opacity: backgroundOverlayOpacity }}
+            className="absolute inset-0"
+            style={{ backgroundColor: backgroundOverlayColor || '#000000', opacity: backgroundOverlayOpacity }}
           />
         )}
       </div>

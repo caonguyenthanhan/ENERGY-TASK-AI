@@ -6,13 +6,15 @@ import { X, Key, MessageSquare, Trash2, ExternalLink, Image as ImageIcon, Palett
 import { useTaskStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import ChronotypeModal from '@/components/ChronotypeModal';
+import LockedFeatureModal from '@/components/LockedFeatureModal';
+import { FeatureKey, getFeatureLabel, getRequiredPoints, isFeatureUnlocked } from '@/lib/features';
 
 interface Props {
   onClose: () => void;
 }
 
 export default function SettingsModal({ onClose }: Props) {
-  const { apiKeys, setApiKeys, customPrompt, setCustomPrompt, clearAllData, backgroundType, backgroundValue, backgroundIsPublic, setBackground, backgroundOverlayOpacity, setBackgroundOverlayOpacity, pointSettings, setPointSettings, chronotype, chronotypeUpdatedAt } = useTaskStore();
+  const { apiKeys, setApiKeys, customPrompt, setCustomPrompt, clearAllData, backgroundType, backgroundValue, backgroundIsPublic, setBackground, backgroundOverlayOpacity, setBackgroundOverlayOpacity, backgroundOverlayColor, setBackgroundOverlayColor, pointSettings, setPointSettings, chronotype, chronotypeUpdatedAt, points, user } = useTaskStore();
   
   const [keysInput, setKeysInput] = useState(apiKeys.join('\n'));
   const [promptInput, setPromptInput] = useState(customPrompt);
@@ -20,12 +22,17 @@ export default function SettingsModal({ onClose }: Props) {
   const [bgValue, setBgValue] = useState(backgroundValue || '#f3f4f6');
   const [bgIsPublic, setBgIsPublic] = useState(backgroundIsPublic || false);
   const [overlayOpacity, setOverlayOpacity] = useState(backgroundOverlayOpacity ?? 0.7);
-  const [points, setPoints] = useState(pointSettings);
+  const [overlayColor, setOverlayColor] = useState(backgroundOverlayColor || '#000000');
+  const [pointDraft, setPointDraft] = useState(pointSettings);
   const [bgTab, setBgTab] = useState<'custom' | 'templates'>('custom');
   const [publicTemplates, setPublicTemplates] = useState<{id: string, type: string, value: string, name: string}[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [showChronotype, setShowChronotype] = useState(false);
   const [isUploadingBg, setIsUploadingBg] = useState(false);
+  const [lockedFeature, setLockedFeature] = useState<FeatureKey | null>(null);
+  const email = user?.email as string | undefined;
+  const backgroundMediaEnabled = isFeatureUnlocked({ feature: 'backgroundMedia', points, email });
+  const backgroundPublicTemplatesEnabled = isFeatureUnlocked({ feature: 'backgroundPublicTemplates', points, email });
 
   const chronotypeLabel = () => {
     if (!chronotype) return 'Chưa thiết lập';
@@ -105,6 +112,51 @@ export default function SettingsModal({ onClose }: Props) {
     });
   };
 
+  const getRecommendedOverlayColor = async (type: 'color' | 'image' | 'video', value: string) => {
+    if (type !== 'image') return '#000000';
+    if (!value) return '#000000';
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const loaded = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Image load failed'));
+      });
+      img.src = value;
+      await loaded;
+
+      const canvas = document.createElement('canvas');
+      const w = 24;
+      const h = 24;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return '#000000';
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3];
+        if (a === 0) continue;
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+        count += 1;
+      }
+      if (count === 0) return '#000000';
+      const rr = r / count;
+      const gg = g / count;
+      const bb = b / count;
+      const luma = (0.2126 * rr + 0.7152 * gg + 0.0722 * bb) / 255;
+      return luma > 0.6 ? '#000000' : '#ffffff';
+    } catch {
+      return '#000000';
+    }
+  };
+
   const uploadBackgroundToStorage = async (file: File) => {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
@@ -125,12 +177,16 @@ export default function SettingsModal({ onClose }: Props) {
   };
 
   const handleSave = () => {
+    const isHexColor = typeof bgValue === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(bgValue);
+    const finalBgType = bgType !== 'color' && !backgroundMediaEnabled ? 'color' : bgType;
+    const finalBgValue = finalBgType === 'color' ? (isHexColor ? bgValue : '#f3f4f6') : bgValue;
     const keys = keysInput.split('\n').map(k => k.trim()).filter(k => k);
     setApiKeys(keys);
     setCustomPrompt(promptInput);
-    setBackground(bgType as any, bgValue, bgIsPublic);
-    setBackgroundOverlayOpacity(overlayOpacity);
-    setPointSettings(points);
+    setBackground(finalBgType as any, finalBgValue, bgIsPublic);
+    setBackgroundOverlayOpacity(finalBgType === 'color' ? 0.7 : overlayOpacity);
+    setBackgroundOverlayColor(finalBgType === 'color' ? '#000000' : overlayColor);
+    setPointSettings(pointDraft);
     onClose();
   };
 
@@ -209,15 +265,15 @@ export default function SettingsModal({ onClose }: Props) {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs text-zinc-500 mb-1">Điểm cơ bản</label>
-                <input type="number" value={points.base} onChange={e => setPoints({...points, base: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 text-sm" />
+                <input type="number" value={pointDraft.base} onChange={e => setPointDraft({...pointDraft, base: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 text-sm" />
               </div>
               <div>
                 <label className="block text-xs text-zinc-500 mb-1">Thưởng quan trọng</label>
-                <input type="number" value={points.importantBonus} onChange={e => setPoints({...points, importantBonus: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 text-sm" />
+                <input type="number" value={pointDraft.importantBonus} onChange={e => setPointDraft({...pointDraft, importantBonus: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 text-sm" />
               </div>
               <div>
                 <label className="block text-xs text-zinc-500 mb-1">Thưởng gấp</label>
-                <input type="number" value={points.urgentBonus} onChange={e => setPoints({...points, urgentBonus: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 text-sm" />
+                <input type="number" value={pointDraft.urgentBonus} onChange={e => setPointDraft({...pointDraft, urgentBonus: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 text-sm" />
               </div>
             </div>
           </div>
@@ -256,8 +312,8 @@ export default function SettingsModal({ onClose }: Props) {
                   Tùy chỉnh
                 </button>
                 <button
-                  onClick={() => setBgTab('templates')}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${bgTab === 'templates' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  onClick={() => (backgroundPublicTemplatesEnabled ? setBgTab('templates') : setLockedFeature('backgroundPublicTemplates'))}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${bgTab === 'templates' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'} ${backgroundPublicTemplatesEnabled ? '' : 'opacity-60'}`}
                 >
                   Mẫu (Public)
                 </button>
@@ -274,14 +330,14 @@ export default function SettingsModal({ onClose }: Props) {
                     <Palette className="w-4 h-4" /> Màu sắc
                   </button>
                   <button 
-                    onClick={() => setBgType('image')}
-                    className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${bgType === 'image' ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+                    onClick={() => (backgroundMediaEnabled ? setBgType('image') : setLockedFeature('backgroundMedia'))}
+                    className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${bgType === 'image' ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'} ${backgroundMediaEnabled ? '' : 'opacity-60'}`}
                   >
                     <ImageIcon className="w-4 h-4" /> Hình ảnh
                   </button>
                   <button 
-                    onClick={() => setBgType('video')}
-                    className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${bgType === 'video' ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+                    onClick={() => (backgroundMediaEnabled ? setBgType('video') : setLockedFeature('backgroundMedia'))}
+                    className={`flex-1 py-2 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${bgType === 'video' ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'} ${backgroundMediaEnabled ? '' : 'opacity-60'}`}
                   >
                     <Video className="w-4 h-4" /> Video
                   </button>
@@ -299,7 +355,7 @@ export default function SettingsModal({ onClose }: Props) {
                   </div>
                 )}
 
-                {(bgType === 'image' || bgType === 'video') && (
+                {(bgType === 'image' || bgType === 'video') && backgroundMediaEnabled && (
                   <div>
                     <input 
                       type="file" 
@@ -316,9 +372,11 @@ export default function SettingsModal({ onClose }: Props) {
                             const uploadedUrl = await uploadBackgroundToStorage(file);
                             if (uploadedUrl) {
                               setBgValue(uploadedUrl);
+                              setOverlayColor(await getRecommendedOverlayColor(bgType, uploadedUrl));
                             } else {
                               const dataUrl = await readAsDataURL(file);
                               setBgValue(dataUrl);
+                              setOverlayColor(await getRecommendedOverlayColor(bgType, dataUrl));
                               alert('Không thể upload lên Supabase Storage. Ứng dụng sẽ dùng ảnh cục bộ (có thể không đồng bộ giữa các trình duyệt).');
                             }
                           } finally {
@@ -353,10 +411,11 @@ export default function SettingsModal({ onClose }: Props) {
                     {publicTemplates.map(t => (
                       <button
                         key={t.id}
-                        onClick={() => {
+                        onClick={async () => {
                           setBgType(t.type as 'color' | 'image' | 'video');
                           setBgValue(t.value);
                           setBgIsPublic(false);
+                          setOverlayColor(await getRecommendedOverlayColor(t.type as any, t.value));
                         }}
                         className={`relative aspect-video rounded-xl overflow-hidden border-2 transition-all ${bgValue === t.value ? 'border-indigo-500' : 'border-transparent hover:border-zinc-700'}`}
                       >
@@ -377,8 +436,29 @@ export default function SettingsModal({ onClose }: Props) {
               </div>
             )}
 
-            {(bgType === 'image' || bgType === 'video') && (
+            {(bgType === 'image' || bgType === 'video') && backgroundMediaEnabled && (
               <div className="mt-5 p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
+                <div className="flex items-center justify-between mb-4 gap-4">
+                  <div className="text-sm font-medium text-zinc-300">Màu lớp phủ</div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={async () => setOverlayColor(await getRecommendedOverlayColor(bgType, bgValue))}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors"
+                    >
+                      Tự động
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={overlayColor}
+                        onChange={(e) => setOverlayColor(e.target.value)}
+                        className="w-9 h-9 rounded cursor-pointer bg-transparent border-0 p-0"
+                      />
+                      <span className="text-xs text-zinc-500">{overlayColor.toUpperCase()}</span>
+                    </div>
+                  </div>
+                </div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-sm font-medium text-zinc-300">Độ mờ lớp phủ</div>
                   <div className="text-xs text-zinc-500">{Math.round(overlayOpacity * 100)}%</div>
@@ -422,6 +502,14 @@ export default function SettingsModal({ onClose }: Props) {
 
       {showChronotype && (
         <ChronotypeModal onClose={() => setShowChronotype(false)} />
+      )}
+      {lockedFeature && (
+        <LockedFeatureModal
+          title={getFeatureLabel(lockedFeature)}
+          requiredPoints={getRequiredPoints(lockedFeature)}
+          currentPoints={points}
+          onClose={() => setLockedFeature(null)}
+        />
       )}
     </div>
   );
