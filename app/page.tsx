@@ -12,6 +12,7 @@ import EditTaskModal from '@/components/EditTaskModal';
 import SettingsModal from '@/components/SettingsModal';
 import ProfileModal from '@/components/ProfileModal';
 import WeeklyReportModal from '@/components/WeeklyReportModal';
+import WeeklyReviewModal from '@/components/WeeklyReviewModal';
 import ChatBot from '@/components/ChatBot';
 import TaskList from '@/components/TaskList';
 import CelebrationModal from '@/components/CelebrationModal';
@@ -31,12 +32,14 @@ export default function Home() {
     points,
     tasks,
     updateTask,
+    weeklyReviews,
   } = useTaskStore();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [showWeeklyReview, setShowWeeklyReview] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const hasCelebrated = useRef(false);
 
@@ -53,6 +56,21 @@ export default function Home() {
       hasCelebrated.current = false;
     }
   }, [points, pointGoal, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    const weekStart = d.toISOString().split('T')[0];
+
+    if (!weeklyReviews.some(r => r.weekStart === weekStart)) {
+      const t = setTimeout(() => setShowWeeklyReview(true), 0);
+      return () => clearTimeout(t);
+    }
+  }, [isLoaded, weeklyReviews]);
 
   const handleAddManual = () => {
     const newTask: Task = {
@@ -213,6 +231,9 @@ export default function Home() {
         )}
         {showReport && (
           <WeeklyReportModal onClose={() => setShowReport(false)} />
+        )}
+        {showWeeklyReview && (
+          <WeeklyReviewModal onClose={() => setShowWeeklyReview(false)} />
         )}
         {showCelebration && (
           <CelebrationModal

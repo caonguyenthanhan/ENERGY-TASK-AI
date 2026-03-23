@@ -12,18 +12,20 @@ interface Props {
 }
 
 export default function SettingsModal({ onClose }: Props) {
-  const { apiKeys, setApiKeys, customPrompt, setCustomPrompt, clearAllData, backgroundType, backgroundValue, backgroundIsPublic, setBackground, pointSettings, setPointSettings, chronotype, chronotypeUpdatedAt } = useTaskStore();
+  const { apiKeys, setApiKeys, customPrompt, setCustomPrompt, clearAllData, backgroundType, backgroundValue, backgroundIsPublic, setBackground, backgroundOverlayOpacity, setBackgroundOverlayOpacity, pointSettings, setPointSettings, chronotype, chronotypeUpdatedAt } = useTaskStore();
   
   const [keysInput, setKeysInput] = useState(apiKeys.join('\n'));
   const [promptInput, setPromptInput] = useState(customPrompt);
   const [bgType, setBgType] = useState(backgroundType || 'color');
   const [bgValue, setBgValue] = useState(backgroundValue || '#f3f4f6');
   const [bgIsPublic, setBgIsPublic] = useState(backgroundIsPublic || false);
+  const [overlayOpacity, setOverlayOpacity] = useState(backgroundOverlayOpacity ?? 0.7);
   const [points, setPoints] = useState(pointSettings);
   const [bgTab, setBgTab] = useState<'custom' | 'templates'>('custom');
   const [publicTemplates, setPublicTemplates] = useState<{id: string, type: string, value: string, name: string}[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [showChronotype, setShowChronotype] = useState(false);
+  const [isUploadingBg, setIsUploadingBg] = useState(false);
 
   const chronotypeLabel = () => {
     if (!chronotype) return 'Chưa thiết lập';
@@ -94,11 +96,40 @@ export default function SettingsModal({ onClose }: Props) {
     }
   }, [bgTab, fetchPublicTemplates]);
 
+  const readAsDataURL = (file: File) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('FileReader failed'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const uploadBackgroundToStorage = async (file: File) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) return null;
+
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const safeExt = ext && ext.length <= 8 ? ext : 'bin';
+    const path = `${userId}/${Date.now()}.${safeExt}`;
+    const { error: uploadError } = await supabase
+      .storage
+      .from('backgrounds')
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (uploadError) return null;
+
+    const { data } = supabase.storage.from('backgrounds').getPublicUrl(path);
+    return data?.publicUrl || null;
+  };
+
   const handleSave = () => {
     const keys = keysInput.split('\n').map(k => k.trim()).filter(k => k);
     setApiKeys(keys);
     setCustomPrompt(promptInput);
     setBackground(bgType as any, bgValue, bgIsPublic);
+    setBackgroundOverlayOpacity(overlayOpacity);
     setPointSettings(points);
     onClose();
   };
@@ -273,25 +304,37 @@ export default function SettingsModal({ onClose }: Props) {
                     <input 
                       type="file" 
                       accept={bgType === 'image' ? "image/*" : "video/mp4,video/webm"}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
                           if (file.size > 5 * 1024 * 1024) {
                             alert("Vui lòng chọn file nhỏ hơn 5MB để đảm bảo hiệu suất đồng bộ.");
                             return;
                           }
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setBgValue(reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
+                          setIsUploadingBg(true);
+                          try {
+                            const uploadedUrl = await uploadBackgroundToStorage(file);
+                            if (uploadedUrl) {
+                              setBgValue(uploadedUrl);
+                            } else {
+                              const dataUrl = await readAsDataURL(file);
+                              setBgValue(dataUrl);
+                              alert('Không thể upload lên Supabase Storage. Ứng dụng sẽ dùng ảnh cục bộ (có thể không đồng bộ giữa các trình duyệt).');
+                            }
+                          } finally {
+                            setIsUploadingBg(false);
+                          }
                         }
                       }}
                       className="block w-full text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 transition-colors"
                     />
-                    {bgValue && bgValue.startsWith('data:') && (
-                      <p className="text-xs text-emerald-500 mt-2">Đã tải lên thành công.</p>
-                    )}
+                    <div className="mt-2 text-xs">
+                      {isUploadingBg ? (
+                        <p className="text-indigo-400">Đang tải lên...</p>
+                      ) : bgValue ? (
+                        <p className="text-emerald-500">Đã chọn nền.</p>
+                      ) : null}
+                    </div>
                     <div className="mt-4 flex items-center gap-2">
                       <input type="checkbox" id="bgPublic" checked={bgIsPublic} onChange={e => setBgIsPublic(e.target.checked)} className="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-indigo-500/50" />
                       <label htmlFor="bgPublic" className="text-sm text-zinc-400">Chia sẻ hình nền này làm mẫu công khai</label>
@@ -331,6 +374,26 @@ export default function SettingsModal({ onClose }: Props) {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {(bgType === 'image' || bgType === 'video') && (
+              <div className="mt-5 p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-medium text-zinc-300">Độ mờ lớp phủ</div>
+                  <div className="text-xs text-zinc-500">{Math.round(overlayOpacity * 100)}%</div>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(overlayOpacity * 100)}
+                  onChange={(e) => setOverlayOpacity(Math.max(0, Math.min(1, Number(e.target.value) / 100)))}
+                  className="w-full accent-indigo-500"
+                />
+                <p className="text-xs text-zinc-500 mt-2">
+                  Điều chỉnh độ tối phía trước ảnh/video để chữ dễ đọc hơn.
+                </p>
               </div>
             )}
           </div>

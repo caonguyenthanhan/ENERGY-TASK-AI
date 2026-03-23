@@ -4,11 +4,10 @@ import { useTaskStore } from '@/lib/store';
 import { ReactNode } from 'react';
 
 export default function AppWrapper({ children }: { children: ReactNode }) {
-  const { backgroundType, backgroundValue } = useTaskStore();
+  const { backgroundType, backgroundValue, backgroundOverlayOpacity } = useTaskStore();
 
   return (
     <div className="relative min-h-screen flex flex-col w-full h-full">
-      {/* Background Layer */}
       <div 
         className="fixed inset-0 z-[-1] transition-all duration-500"
         style={{
@@ -19,7 +18,7 @@ export default function AppWrapper({ children }: { children: ReactNode }) {
           <img
             src={backgroundValue}
             alt="Background"
-            className="w-full h-full object-cover opacity-30"
+            className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
           />
         )}
@@ -30,12 +29,17 @@ export default function AppWrapper({ children }: { children: ReactNode }) {
             loop 
             muted 
             playsInline
-            className="w-full h-full object-cover opacity-30"
+            className="w-full h-full object-cover"
+          />
+        )}
+        {(backgroundType === 'image' || backgroundType === 'video') && (
+          <div
+            className="absolute inset-0 bg-black"
+            style={{ opacity: backgroundOverlayOpacity }}
           />
         )}
       </div>
 
-      {/* Content Layer */}
       <div className="flex-1 flex flex-col relative z-0">
         {children}
       </div>

@@ -15,6 +15,15 @@ export type Subtask = {
   isCompleted: boolean;
 };
 
+export type WeeklyReview = {
+  weekStart: string;
+  healthPercent: number;
+  mentalPercent: number;
+  lastWeekNote: string;
+  nextWeekNote: string;
+  createdAt: string;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -67,9 +76,11 @@ type AppState = {
   customPrompt: string;
   chronotype: Chronotype | null;
   chronotypeUpdatedAt: string | null;
+  weeklyReviews: WeeklyReview[];
   backgroundType?: 'color' | 'image' | 'video';
   backgroundValue?: string;
   backgroundIsPublic?: boolean;
+  backgroundOverlayOpacity: number;
   mentalHealth?: number;
 };
 
@@ -155,6 +166,23 @@ function normalizeUpdatedAt(value: unknown): string | null {
   return d.toISOString();
 }
 
+function clamp01(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
+}
+
+function getWeekStartISO(date: Date = new Date()): string {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().split('T')[0];
+}
+
 function getChronotypeFitNow(chronotype: Chronotype): { fit: boolean; windowLabel: string } {
   const hour = new Date().getHours();
   if (chronotype === 'lion') {
@@ -187,9 +215,11 @@ const initialState: AppState = {
   customPrompt: '',
   chronotype: null,
   chronotypeUpdatedAt: null,
+  weeklyReviews: [],
   backgroundType: 'color',
   backgroundValue: '#f3f4f6', // Tailwind gray-100
   backgroundIsPublic: false,
+  backgroundOverlayOpacity: 0.7,
   mentalHealth: 50,
 };
 
@@ -227,6 +257,15 @@ function useTaskStoreInternal() {
             parsed.customPrompt = typeof parsed.customPrompt === 'string' ? parsed.customPrompt : '';
             parsed.chronotype = normalizeChronotype(parsed.chronotype);
             parsed.chronotypeUpdatedAt = normalizeUpdatedAt(parsed.chronotypeUpdatedAt);
+            parsed.weeklyReviews = Array.isArray(parsed.weeklyReviews) ? parsed.weeklyReviews.map((r: any) => ({
+              weekStart: typeof r?.weekStart === 'string' ? r.weekStart : getWeekStartISO(),
+              healthPercent: Math.max(0, Math.min(100, Number(r?.healthPercent ?? 50))),
+              mentalPercent: Math.max(0, Math.min(100, Number(r?.mentalPercent ?? 50))),
+              lastWeekNote: typeof r?.lastWeekNote === 'string' ? r.lastWeekNote : '',
+              nextWeekNote: typeof r?.nextWeekNote === 'string' ? r.nextWeekNote : '',
+              createdAt: typeof r?.createdAt === 'string' ? r.createdAt : new Date().toISOString(),
+            })) : [];
+            parsed.backgroundOverlayOpacity = clamp01(parsed.backgroundOverlayOpacity, 0.7);
             parsed.tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
               ...t,
               title: typeof t.title === 'string' ? t.title : 'Công việc không tên',
@@ -366,6 +405,7 @@ function useTaskStoreInternal() {
   const setCustomPrompt = (prompt: string) => setState(prev => ({ ...prev, customPrompt: prompt }));
   const setChronotype = (chronotype: Chronotype | null) => setState(prev => ({ ...prev, chronotype, chronotypeUpdatedAt: new Date().toISOString() }));
   const setBackground = (type: 'color' | 'image' | 'video', value: string, isPublic: boolean = false) => setState(prev => ({ ...prev, backgroundType: type, backgroundValue: value, backgroundIsPublic: isPublic }));
+  const setBackgroundOverlayOpacity = (opacity: number) => setState(prev => ({ ...prev, backgroundOverlayOpacity: clamp01(opacity, prev.backgroundOverlayOpacity) }));
   const setMentalHealth = (value: number) => setState(prev => ({ ...prev, mentalHealth: value }));
   const setPointSettings = (settings: { base: number, importantBonus: number, urgentBonus: number }) => setState(prev => ({ ...prev, pointSettings: settings }));
   const setPointGoal = (goal: number) => setState(prev => ({ ...prev, pointGoal: goal }));
@@ -449,6 +489,35 @@ function useTaskStoreInternal() {
       });
       return { ...prev, tasks: updatedTasks };
     });
+  };
+
+  const upsertWeeklyReview = (payload: Omit<WeeklyReview, 'createdAt'>) => {
+    setState(prev => {
+      const next: WeeklyReview = {
+        ...payload,
+        healthPercent: Math.max(0, Math.min(100, payload.healthPercent)),
+        mentalPercent: Math.max(0, Math.min(100, payload.mentalPercent)),
+        lastWeekNote: payload.lastWeekNote ?? '',
+        nextWeekNote: payload.nextWeekNote ?? '',
+        createdAt: new Date().toISOString(),
+      };
+      const idx = prev.weeklyReviews.findIndex(r => r.weekStart === payload.weekStart);
+      const weeklyReviews = idx >= 0
+        ? prev.weeklyReviews.map((r, i) => (i === idx ? next : r))
+        : [...prev.weeklyReviews, next];
+      return { ...prev, weeklyReviews };
+    });
+  };
+
+  const hasWeeklyReviewForCurrentWeek = () => {
+    const weekStart = getWeekStartISO();
+    return state.weeklyReviews.some(r => r.weekStart === weekStart);
+  };
+
+  const getLatestWeeklyReview = () => {
+    if (state.weeklyReviews.length === 0) return null;
+    const sorted = [...state.weeklyReviews].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+    return sorted[0] || null;
   };
 
   const getTopTask = (): Task | null => {
@@ -572,6 +641,7 @@ function useTaskStoreInternal() {
     setCustomPrompt,
     setChronotype,
     setBackground,
+    setBackgroundOverlayOpacity,
     setMentalHealth,
     setPointSettings,
     setPointGoal,
@@ -585,6 +655,9 @@ function useTaskStoreInternal() {
     resetSkippedTasks,
     updateTask,
     reorderTasks,
+    upsertWeeklyReview,
+    hasWeeklyReviewForCurrentWeek,
+    getLatestWeeklyReview,
     getTopTask,
     syncData,
   };
