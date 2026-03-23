@@ -3,6 +3,7 @@
 import { useTaskStore } from '@/lib/store';
 import { ReactNode } from 'react';
 import { isFeatureUnlocked } from '@/lib/features';
+import NextImage from 'next/image';
 
 export default function AppWrapper({ children }: { children: ReactNode }) {
   const { backgroundType, backgroundValue, backgroundOverlayOpacity, backgroundOverlayColor, points, user } = useTaskStore();
@@ -22,12 +23,17 @@ export default function AppWrapper({ children }: { children: ReactNode }) {
         }}
       >
         {effectiveType === 'image' && effectiveValue && (
-          <img
-            src={effectiveValue}
-            alt="Background"
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
+          <div className="w-full h-full relative">
+            <NextImage
+              src={effectiveValue}
+              alt="Background"
+              fill
+              sizes="100vw"
+              unoptimized
+              className="object-cover"
+              referrerPolicy="no-referrer"
+            />
+          </div>
         )}
         {effectiveType === 'video' && effectiveValue && (
           <video 
