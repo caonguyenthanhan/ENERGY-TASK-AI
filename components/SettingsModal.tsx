@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { X, Key, MessageSquare, Trash2, ExternalLink, Image as ImageIcon, Palette, Video, Star, Loader2, Activity } from 'lucide-react';
 import { useTaskStore } from '@/lib/store';
@@ -33,38 +33,45 @@ export default function SettingsModal({ onClose }: Props) {
     return 'Cá heo';
   };
 
-  const defaultTemplates = [
+  const defaultTemplates = useMemo(() => [
     { id: 't1', type: 'image', value: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1000&auto=format&fit=crop', name: 'Bãi biển' },
     { id: 't2', type: 'image', value: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1000&auto=format&fit=crop', name: 'Núi non' },
     { id: 't3', type: 'image', value: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=1000&auto=format&fit=crop', name: 'Thiên nhiên' },
     { id: 't4', type: 'color', value: '#1e1e2e', name: 'Dark Mode' },
     { id: 't5', type: 'color', value: '#fdf6e3', name: 'Light Mode' },
-  ];
+  ], []);
 
-  useEffect(() => {
-    if (bgTab === 'templates') {
-      fetchPublicTemplates();
-    }
-  }, [bgTab]);
-
-  const fetchPublicTemplates = async () => {
+  const fetchPublicTemplates = useCallback(async () => {
     setIsLoadingTemplates(true);
     try {
       const { data, error } = await supabase
         .from('user_data')
-        .select('state->backgroundType, state->backgroundValue')
+        .select('state')
         .eq('state->>backgroundIsPublic', 'true');
 
       if (error) throw error;
 
       if (data) {
+        const normalize = (rowState: any) => {
+          const s = typeof rowState === 'string' ? (() => { try { return JSON.parse(rowState); } catch { return null; } })() : rowState;
+          if (!s || typeof s !== 'object') return null;
+          const type = typeof (s as any).backgroundType === 'string' ? (s as any).backgroundType : null;
+          const value = typeof (s as any).backgroundValue === 'string' ? (s as any).backgroundValue : null;
+          if (!type || !value) return null;
+          if (type !== 'color' && type !== 'image' && type !== 'video') return null;
+          if (type === 'color') return { type, value };
+          if (!value.startsWith('http')) return null;
+          return { type, value };
+        };
+
         const fetched = data
-          .filter(d => d.backgroundType && d.backgroundValue)
-          .map((d, i) => ({
+          .map((d: any) => normalize(d.state))
+          .filter(Boolean)
+          .map((d: any, i: number) => ({
             id: `pub_${i}`,
-            type: d.backgroundType as string,
-            value: d.backgroundValue as string,
-            name: `Mẫu cộng đồng ${i + 1}`
+            type: d.type as string,
+            value: d.value as string,
+            name: `Mẫu cộng đồng ${i + 1}`,
           }));
         
         // Remove duplicates based on value
@@ -79,7 +86,13 @@ export default function SettingsModal({ onClose }: Props) {
     } finally {
       setIsLoadingTemplates(false);
     }
-  };
+  }, [defaultTemplates]);
+
+  useEffect(() => {
+    if (bgTab === 'templates') {
+      fetchPublicTemplates();
+    }
+  }, [bgTab, fetchPublicTemplates]);
 
   const handleSave = () => {
     const keys = keysInput.split('\n').map(k => k.trim()).filter(k => k);
