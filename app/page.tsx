@@ -40,12 +40,15 @@ export default function Home() {
   const [showCelebration, setShowCelebration] = useState(false);
   const hasCelebrated = useRef(false);
 
-  const pointGoal = useTaskStore(state => state.pointGoal);
+  const { pointGoal } = useTaskStore();
 
   useEffect(() => {
     if (isLoaded && points >= pointGoal && !hasCelebrated.current) {
-      setShowCelebration(true);
+      const timer = setTimeout(() => {
+        setShowCelebration(true);
+      }, 0);
       hasCelebrated.current = true;
+      return () => clearTimeout(timer);
     } else if (isLoaded && points < pointGoal) {
       hasCelebrated.current = false;
     }
@@ -196,7 +199,10 @@ export default function Home() {
           <EditTaskModal
             task={editingTask}
             onClose={() => setEditingTask(null)}
-            onSave={updateTask}
+            onSave={(taskId, updates) => {
+              updateTask(taskId, updates);
+              setEditingTask(null);
+            }}
           />
         )}
         {showSettings && (

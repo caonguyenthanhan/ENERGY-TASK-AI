@@ -15,6 +15,7 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingTasks, setPendingTasks] = useState<ParsedTask[] | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<{parsed: ParsedTask, existing: Task}[]>([]);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,14 +41,14 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
           return;
         }
 
-        onTasksAdded(parsedTasks);
-        setInput('');
+        setPendingTasks(parsedTasks);
+        setShowConfirmation(true);
       } else {
-        // We shouldn't use alert, but for simplicity we'll just show a toast or inline error.
-        // I'll skip alert for now.
+        alert('AI không tìm thấy công việc nào trong nội dung bạn nhập. Vui lòng thử lại với nội dung rõ ràng hơn.');
       }
     } catch (error: any) {
       console.error(error);
+      alert('Có lỗi xảy ra khi phân tích công việc. Vui lòng thử lại.');
     } finally {
       setIsProcessing(false);
     }
@@ -59,6 +60,7 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
       setInput('');
       setPendingTasks(null);
       setDuplicateWarning([]);
+      setShowConfirmation(false);
     }
   };
 
@@ -84,12 +86,14 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
       setInput('');
       setPendingTasks(null);
       setDuplicateWarning([]);
+      setShowConfirmation(false);
     }
   };
 
   const cancelAdd = () => {
     setPendingTasks(null);
     setDuplicateWarning([]);
+    setShowConfirmation(false);
   };
 
   return (
@@ -155,6 +159,38 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
                 className="px-4 py-2 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
               >
                 Vẫn thêm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showConfirmation && pendingTasks && duplicateWarning.length === 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-lg font-semibold text-zinc-100 mb-2">Xác nhận thêm công việc</h3>
+            <p className="text-sm text-zinc-300 mb-4">
+              AI đã tìm thấy {pendingTasks.length} công việc:
+            </p>
+            <ul className="list-disc pl-5 mb-6 text-sm text-zinc-400 max-h-40 overflow-y-auto custom-scrollbar">
+              {pendingTasks.map((t, i) => (
+                <li key={i} className="mb-1">
+                  <span className="font-medium text-zinc-300">{t.title}</span>
+                  {t.durationMinutes && <span className="text-zinc-500"> ({t.durationMinutes}p)</span>}
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap justify-end gap-3">
+              <button
+                onClick={cancelAdd}
+                className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-zinc-800 text-zinc-300 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                onClick={confirmAdd}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+              >
+                Xác nhận thêm
               </button>
             </div>
           </div>

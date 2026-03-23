@@ -126,7 +126,6 @@ function useTaskStoreInternal() {
               isRoutine: t.isRoutine ?? false,
             })) : [];
             
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setState({ ...initialState, ...parsed });
           }
         } catch (e) {

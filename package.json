@@ -26,7 +26,7 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-use-measure": "^2.1.7",
-    "react-window": "^2.2.7",
+    "react-window": "^1.8.10",
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.3.1",
     "uuid": "^13.0.0"

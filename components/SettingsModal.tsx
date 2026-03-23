@@ -268,7 +268,7 @@ export default function SettingsModal({ onClose }: Props) {
                       <button
                         key={t.id}
                         onClick={() => {
-                          setBgType(t.type);
+                          setBgType(t.type as 'color' | 'image' | 'video');
                           setBgValue(t.value);
                           setBgIsPublic(false);
                         }}

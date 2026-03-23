@@ -55,17 +55,27 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
         const d = new Date(deadline);
         if (!isNaN(d.getTime())) {
           parsedDeadline = d.toISOString();
+        } else {
+          alert('Định dạng hạn chót không hợp lệ. Vui lòng kiểm tra lại.');
+          return;
         }
       } catch {
-        parsedDeadline = null;
+        alert('Định dạng hạn chót không hợp lệ. Vui lòng kiểm tra lại.');
+        return;
       }
     }
 
+    const parsedDuration = parseInt(duration as any, 10);
+    if (isNaN(parsedDuration) || parsedDuration < 0) {
+      alert('Thời lượng phải là một số dương.');
+      return;
+    }
+
     onSave(task.id, {
-      title,
+      title: title.trim() || 'Công việc không tên',
       deadline: parsedDeadline,
       status,
-      durationMinutes: duration,
+      durationMinutes: parsedDuration,
       isImportant,
       isUrgent,
       isRoutine,

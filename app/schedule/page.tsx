@@ -366,8 +366,8 @@ export default function SchedulePage() {
           <EditTaskModal
             task={editingTask}
             onClose={() => setEditingTask(null)}
-            onSave={(updatedTask) => {
-              updateTask(updatedTask.id, updatedTask);
+            onSave={(taskId, updatedTask) => {
+              updateTask(taskId, updatedTask);
               setEditingTask(null);
             }}
           />

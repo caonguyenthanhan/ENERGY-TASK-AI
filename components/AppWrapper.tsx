@@ -3,6 +3,8 @@
 import { useTaskStore } from '@/lib/store';
 import { ReactNode } from 'react';
 
+import Image from 'next/image';
+
 export default function AppWrapper({ children }: { children: ReactNode }) {
   const { backgroundType, backgroundValue } = useTaskStore();
 
@@ -16,10 +18,12 @@ export default function AppWrapper({ children }: { children: ReactNode }) {
         }}
       >
         {backgroundType === 'image' && backgroundValue && (
-          <img 
+          <Image 
             src={backgroundValue} 
             alt="Background" 
-            className="w-full h-full object-cover opacity-30"
+            fill
+            className="object-cover opacity-30"
+            referrerPolicy="no-referrer"
           />
         )}
         {backgroundType === 'video' && backgroundValue && (
