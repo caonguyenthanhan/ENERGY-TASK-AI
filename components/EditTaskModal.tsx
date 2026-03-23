@@ -65,9 +65,9 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
       }
     }
 
-    const parsedDuration = parseInt(duration as any, 10);
-    if (isNaN(parsedDuration) || parsedDuration < 0) {
-      alert('Thời lượng phải là một số dương.');
+    const parsedDuration = Math.round(Number(duration));
+    if (!Number.isFinite(parsedDuration) || parsedDuration < 1) {
+      alert('Thời lượng phải là một số nguyên dương.');
       return;
     }
 
@@ -140,7 +140,9 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
               <input
                 type="number"
                 value={duration}
-                onChange={e => setDuration(Number(e.target.value))}
+                min={1}
+                step={5}
+                onChange={e => setDuration(e.target.value === '' ? NaN : Number(e.target.value))}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
               />
             </div>
