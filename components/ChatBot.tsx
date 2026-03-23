@@ -15,7 +15,7 @@ type Message = {
 };
 
 export default function ChatBot() {
-  const { apiKeys, customPrompt, tasks, addTasks, mentalHealth, setMentalHealth } = useTaskStore();
+  const { apiKeys, customPrompt, tasks, addTasks, mentalHealth, setMentalHealth, chronotype, energyLevel, getLatestWeeklyReview } = useTaskStore();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', role: 'model', text: 'Chào bạn! Mình có thể giúp gì cho bạn hôm nay?' }
@@ -48,7 +48,16 @@ export default function ChatBot() {
 
     try {
       const history = messages.map(m => ({ role: m.role, text: m.text }));
-      const response = await chatWithAI(userMsg.text, history, apiKeys, customPrompt, tasks);
+      const latestWeekly = getLatestWeeklyReview();
+      const chronotypeLabel = chronotype === 'lion' ? 'Sư tử' : chronotype === 'bear' ? 'Gấu' : chronotype === 'wolf' ? 'Sói' : chronotype === 'dolphin' ? 'Cá heo' : null;
+      const extraContext = [
+        chronotypeLabel ? `Chronotype: ${chronotypeLabel}` : '',
+        energyLevel ? `Năng lượng hôm nay: ${energyLevel}` : '',
+        typeof mentalHealth === 'number' ? `Sức khoẻ tinh thần hiện tại: ${mentalHealth}%` : '',
+        latestWeekly ? `Đánh giá tuần (bắt đầu ${latestWeekly.weekStart}): sức khoẻ ${latestWeekly.healthPercent}%, tâm lý ${latestWeekly.mentalPercent}%. Tuần qua: ${latestWeekly.lastWeekNote || '(trống)'}. Tuần tới: ${latestWeekly.nextWeekNote || '(trống)'}.` : '',
+      ].filter(Boolean).join('\n');
+
+      const response = await chatWithAI(userMsg.text, history, apiKeys, customPrompt, tasks, extraContext);
       
       const modelMsg: Message = { id: (Date.now() + 1).toString(), role: 'model', text: response };
       setMessages(prev => [...prev, modelMsg]);

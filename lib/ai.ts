@@ -78,18 +78,19 @@ export async function generateSpeech(text: string, apiKeys: string[]): Promise<s
   });
 }
 
-export async function chatWithAI(message: string, history: { role: string, text: string }[], apiKeys: string[], customPrompt: string, existingTasks: any[]): Promise<string> {
+export async function chatWithAI(message: string, history: { role: string, text: string }[], apiKeys: string[], customPrompt: string, existingTasks: any[], extraContext: string = ""): Promise<string> {
   const systemInstruction = customPrompt || "Bạn là một trợ lý ảo thông minh cho ứng dụng quản lý công việc. Hãy trả lời ngắn gọn, thân thiện và hữu ích.";
   const existingContext = existingTasks.length > 0 
     ? `\n\nDanh sách công việc hiện tại của người dùng:\n${existingTasks.map(t => `- ${t.title} (Trạng thái: ${t.status})`).join('\n')}`
     : "";
+  const extra = extraContext && extraContext.trim().length > 0 ? `\n\nNgữ cảnh bổ sung:\n${extraContext.trim()}` : "";
 
   return callAIWithRetry(apiKeys, async (ai) => {
     const contents = history.map(msg => ({
       role: msg.role === "user" ? "user" : "model",
       parts: [{ text: msg.text }]
     }));
-    contents.push({ role: "user", parts: [{ text: message + existingContext }] });
+    contents.push({ role: "user", parts: [{ text: message + existingContext + extra }] });
 
     const response = await ai.models.generateContent({
       model: "gemini-3.1-pro-preview",
