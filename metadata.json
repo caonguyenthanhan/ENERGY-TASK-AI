@@ -1,5 +1,45 @@
 {
   "name": "Energy-Task AI",
-  "description": "A fresh start",
-  "requestFramePermissions": []
+  "short_name": "Energy AI",
+  "version": "1.0.1",
+  "description": "A fresh start - Ứng dụng quản lý năng lượng và công việc tích hợp AI",
+  "author": "Cao Nguyen Thanh An",
+  "license": "MIT",
+  "keywords": [
+    "AI",
+    "task management",
+    "productivity",
+    "energy"
+  ],
+  "repository": "https://github.com/caonguyenthanhan/ENERGY-TASK-AI",
+  "icons": {
+    "full": "lib/logo/Energy-Task_AI.png",
+    "full_ico": "lib/logo/Energy-Task_AI.ico",
+    "short": "lib/logo/Energy_AI.png",
+    "short_ico": "lib/logo/Energy_AI.ico"
+  },
+  "theme": {
+    "palette": "Neo-Vitality",
+    "style": "Tương lai, Công nghệ AI, Năng lượng tuôn chảy (Dark Mode chủ đạo)",
+    "primary": "#06B6D4",
+    "secondary": "#10B981",
+    "accent": "#F59E0B",
+    "background": {
+      "dark": "#0F172A",
+      "light": "#F8FAFC"
+    },
+    "text": {
+      "light": "#E2E8F0",
+      "dark": "#1E293B"
+    }
+  },
+  "theme_color": "#06B6D4",
+  "background_color": "#0F172A",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation",
+    "clipboard-read",
+    "clipboard-write"
+  ]
 }
