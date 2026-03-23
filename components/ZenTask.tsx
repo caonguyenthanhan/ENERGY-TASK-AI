@@ -58,6 +58,7 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
   const chronoFit = task.scoreBreakdown?.chronotypeFit;
   const moodBonus = task.scoreBreakdown?.moodBonus ?? 0;
   const mood = task.scoreBreakdown?.mood ?? null;
+  const ivyLeeRank = task.scoreBreakdown?.ivyLeeRank ?? null;
 
   const chronotypeLabel = () => {
     if (!chronotype) return null;
@@ -227,6 +228,12 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
           {mood && moodBonus > 0 && (
             <span className="px-3 py-1 rounded-full bg-fuchsia-500/10 text-fuchsia-300 text-sm font-medium">
               Cảm xúc ({moodLabel()}) +{moodBonus}
+            </span>
+          )}
+          {ivyLeeRank && (
+            <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 text-sm font-medium inline-flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              Ivy Lee #{ivyLeeRank}
             </span>
           )}
         </div>

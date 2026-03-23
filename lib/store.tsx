@@ -40,6 +40,11 @@ export type MorningProtocolPrefs = {
   enabled: boolean;
 };
 
+export type DailyTopSixRecord = {
+  date: string;
+  taskIds: string[];
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -61,6 +66,7 @@ export type Task = {
     chronotypeFit?: boolean;
     moodBonus?: number;
     mood?: Mood | null;
+    ivyLeeRank?: number;
   };
   timerStatus?: 'idle' | 'running' | 'paused';
   timerStartedAt?: string | null;
@@ -90,6 +96,7 @@ type AppState = {
   mood: Mood | null;
   lastMoodDate: string | null;
   moodHistory: MoodRecord[];
+  dailyTopSix: DailyTopSixRecord[];
   points: number;
   pointGoal: number;
   pointSettings: { base: number, importantBonus: number, urgentBonus: number };
@@ -240,6 +247,7 @@ const initialState: AppState = {
   mood: null,
   lastMoodDate: null,
   moodHistory: [],
+  dailyTopSix: [],
   points: 0,
   pointGoal: 100,
   pointSettings: { base: 10, importantBonus: 20, urgentBonus: 10 },
@@ -299,6 +307,10 @@ function useTaskStoreInternal() {
               date: typeof r?.date === 'string' ? r.date : todayISO,
               mood: normalizeMood(r?.mood) ?? 'neutral',
             })).filter((r: any) => typeof r?.date === 'string' && typeof r?.mood === 'string') : [];
+            parsed.dailyTopSix = Array.isArray(parsed.dailyTopSix) ? parsed.dailyTopSix.map((r: any) => ({
+              date: typeof r?.date === 'string' ? r.date : todayISO,
+              taskIds: Array.isArray(r?.taskIds) ? r.taskIds.map((x: any) => String(x)).filter(Boolean).slice(0, 6) : [],
+            })).filter((r: any) => typeof r?.date === 'string' && Array.isArray(r?.taskIds)) : [];
             parsed.weeklyReviews = Array.isArray(parsed.weeklyReviews) ? parsed.weeklyReviews.map((r: any) => ({
               weekStart: typeof r?.weekStart === 'string' ? r.weekStart : getWeekStartISO(),
               healthPercent: Math.max(0, Math.min(100, Number(r?.healthPercent ?? 50))),
@@ -554,6 +566,44 @@ function useTaskStoreInternal() {
     });
   };
 
+  const setDailyTopSixForToday = (taskIds: string[]) => {
+    setState(prev => {
+      const todayISO = new Date().toISOString().split('T')[0];
+      const seen = new Set<string>();
+      const normalized = taskIds
+        .map(x => String(x))
+        .filter(Boolean)
+        .filter(id => {
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        })
+        .slice(0, 6);
+
+      const idx = prev.dailyTopSix.findIndex(r => r.date === todayISO);
+      const next: DailyTopSixRecord = { date: todayISO, taskIds: normalized };
+      const dailyTopSix = idx >= 0
+        ? prev.dailyTopSix.map((r, i) => (i === idx ? next : r))
+        : [...prev.dailyTopSix, next];
+      return { ...prev, dailyTopSix };
+    });
+  };
+
+  const clearDailyTopSixForToday = () => setDailyTopSixForToday([]);
+
+  const getDailyTopSixForToday = () => {
+    const todayISO = new Date().toISOString().split('T')[0];
+    return state.dailyTopSix.find(r => r.date === todayISO) || { date: todayISO, taskIds: [] };
+  };
+
+  const getIvyLeeRankForToday = (taskId: string) => {
+    const todayISO = new Date().toISOString().split('T')[0];
+    const record = state.dailyTopSix.find(r => r.date === todayISO);
+    if (!record) return null;
+    const idx = record.taskIds.indexOf(taskId);
+    return idx >= 0 ? idx + 1 : null;
+  };
+
   const toggleMorningProtocolItem = (itemId: string) => {
     setState(prev => {
       const todayISO = new Date().toISOString().split('T')[0];
@@ -609,6 +659,18 @@ function useTaskStoreInternal() {
     const activeTasks = state.tasks.filter(t => t.status === 'todo');
     if (activeTasks.length === 0) return null;
 
+    const todayISO = new Date().toISOString().split('T')[0];
+    const ivy = state.dailyTopSix.find(r => r.date === todayISO);
+    if (ivy && ivy.taskIds.length > 0) {
+      for (let i = 0; i < ivy.taskIds.length; i += 1) {
+        const id = ivy.taskIds[i];
+        const t = activeTasks.find(x => x.id === id);
+        if (t) {
+          return { ...t, scoreBreakdown: { ...(t.scoreBreakdown || {}), ivyLeeRank: i + 1 } };
+        }
+      }
+    }
+
     const scoredTasks = activeTasks.map(task => {
       let score = 0;
       const now = new Date().getTime();
@@ -616,6 +678,7 @@ function useTaskStoreInternal() {
       let chronotypeFit: boolean | undefined = undefined;
       let moodBonus = 0;
       const mood = state.mood ?? null;
+      let ivyLeeRank: number | undefined = undefined;
       
       if (task.deadline) {
         try {
@@ -671,7 +734,12 @@ function useTaskStoreInternal() {
         score += moodBonus;
       }
 
-      return { ...task, score, scoreBreakdown: { chronotypeBonus, chronotypeFit, moodBonus, mood } };
+      if (ivy) {
+        const idx = ivy.taskIds.indexOf(task.id);
+        if (idx >= 0) ivyLeeRank = idx + 1;
+      }
+
+      return { ...task, score, scoreBreakdown: { chronotypeBonus, chronotypeFit, moodBonus, mood, ivyLeeRank } };
     });
 
     scoredTasks.sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -760,6 +828,10 @@ function useTaskStoreInternal() {
     resetSkippedTasks,
     updateTask,
     reorderTasks,
+    setDailyTopSixForToday,
+    clearDailyTopSixForToday,
+    getDailyTopSixForToday,
+    getIvyLeeRankForToday,
     toggleMorningProtocolItem,
     getMorningAdherenceForToday,
     upsertWeeklyReview,

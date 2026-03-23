@@ -15,6 +15,8 @@ import WeeklyReportModal from '@/components/WeeklyReportModal';
 import WeeklyReviewModal from '@/components/WeeklyReviewModal';
 import MoodCheckIn from '@/components/MoodCheckIn';
 import MorningProtocolCard from '@/components/MorningProtocolCard';
+import DailyTopSixCard from '@/components/DailyTopSixCard';
+import IvyLeeModal from '@/components/IvyLeeModal';
 import ChatBot from '@/components/ChatBot';
 import TaskList from '@/components/TaskList';
 import CelebrationModal from '@/components/CelebrationModal';
@@ -43,6 +45,7 @@ export default function Home() {
   const [showReport, setShowReport] = useState(false);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showIvyLee, setShowIvyLee] = useState(false);
   const hasCelebrated = useRef(false);
 
   const { pointGoal } = useTaskStore();
@@ -217,7 +220,12 @@ export default function Home() {
         </div>
 
         {/* Right Column: Task List */}
-        <TaskList onEditTask={setEditingTask} onAddManual={handleAddManual} onCompleteTask={handleCompleteTask} />
+        <div className="w-full lg:w-[420px] flex flex-col gap-6">
+          {energyLevel && (
+            <DailyTopSixCard onOpen={() => setShowIvyLee(true)} />
+          )}
+          <TaskList onEditTask={setEditingTask} onAddManual={handleAddManual} onCompleteTask={handleCompleteTask} />
+        </div>
       </div>
 
       {/* Modals */}
@@ -243,6 +251,9 @@ export default function Home() {
         )}
         {showWeeklyReview && (
           <WeeklyReviewModal onClose={() => setShowWeeklyReview(false)} />
+        )}
+        {showIvyLee && (
+          <IvyLeeModal onClose={() => setShowIvyLee(false)} />
         )}
         {showCelebration && (
           <CelebrationModal
