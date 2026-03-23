@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Trophy, RefreshCw, Settings, Database, User, BarChart2, Calendar, Link as LinkIcon } from 'lucide-react';
+import { Zap, Trophy, RefreshCw, Settings, Database, User, BarChart2, Calendar, Link as LinkIcon, Flame } from 'lucide-react';
 import Link from 'next/link';
 import { useTaskStore, Task } from '@/lib/store';
 import EnergyCheckIn from '@/components/EnergyCheckIn';
@@ -34,6 +34,8 @@ export default function Home() {
     resetSkippedTasks,
     getTopTask,
     points,
+    pointGoal,
+    getCurrentStreak,
     tasks,
     updateTask,
     weeklyReviews,
@@ -47,8 +49,7 @@ export default function Home() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [showIvyLee, setShowIvyLee] = useState(false);
   const hasCelebrated = useRef(false);
-
-  const { pointGoal } = useTaskStore();
+  const currentStreak = getCurrentStreak();
 
   useEffect(() => {
     if (isLoaded && points >= pointGoal && !hasCelebrated.current) {
@@ -128,6 +129,10 @@ export default function Home() {
           <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800">
             <Trophy className="w-4 h-4 text-amber-500" />
             <span className="text-sm font-medium text-zinc-300">{points} điểm</span>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800">
+            <Flame className="w-4 h-4 text-rose-400" />
+            <span className="text-sm font-medium text-zinc-300">{currentStreak} streak</span>
           </div>
           <button
             onClick={() => setShowReport(true)}

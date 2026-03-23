@@ -45,6 +45,13 @@ export type DailyTopSixRecord = {
   taskIds: string[];
 };
 
+export type StreakReason = 'important' | 'ivy1' | 'both';
+
+export type StreakRecord = {
+  date: string;
+  reason: StreakReason;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -100,6 +107,7 @@ type AppState = {
   lastMoodDate: string | null;
   moodHistory: MoodRecord[];
   dailyTopSix: DailyTopSixRecord[];
+  streakHistory: StreakRecord[];
   points: number;
   pointGoal: number;
   pointSettings: { base: number, importantBonus: number, urgentBonus: number };
@@ -265,6 +273,7 @@ const initialState: AppState = {
   lastMoodDate: null,
   moodHistory: [],
   dailyTopSix: [],
+  streakHistory: [],
   points: 0,
   pointGoal: 100,
   pointSettings: { base: 10, importantBonus: 20, urgentBonus: 10 },
@@ -328,6 +337,10 @@ function useTaskStoreInternal() {
               date: typeof r?.date === 'string' ? r.date : todayISO,
               taskIds: Array.isArray(r?.taskIds) ? r.taskIds.map((x: any) => String(x)).filter(Boolean).slice(0, 6) : [],
             })).filter((r: any) => typeof r?.date === 'string' && Array.isArray(r?.taskIds)) : [];
+            parsed.streakHistory = Array.isArray(parsed.streakHistory) ? parsed.streakHistory.map((r: any) => ({
+              date: typeof r?.date === 'string' ? r.date : todayISO,
+              reason: r?.reason === 'both' || r?.reason === 'important' || r?.reason === 'ivy1' ? r.reason : 'important',
+            })).filter((r: any) => typeof r?.date === 'string') : [];
             parsed.weeklyReviews = Array.isArray(parsed.weeklyReviews) ? parsed.weeklyReviews.map((r: any) => ({
               weekStart: typeof r?.weekStart === 'string' ? r.weekStart : getWeekStartISO(),
               healthPercent: Math.max(0, Math.min(100, Number(r?.healthPercent ?? 50))),
@@ -566,6 +579,12 @@ function useTaskStoreInternal() {
       const task = prev.tasks.find(t => t.id === taskId);
       if (!task || task.status === 'done') return prev;
 
+      const completedAt = new Date().toISOString();
+      const dayISO = completedAt.split('T')[0];
+      const ivyToday = prev.dailyTopSix.find(r => r.date === dayISO);
+      const isIvy1 = ivyToday?.taskIds?.[0] === taskId;
+      const isImportant = Boolean(task.isImportant);
+
       let pointsEarned = prev.pointSettings.base;
       if (task.isImportant) pointsEarned += prev.pointSettings.importantBonus;
       if (task.isUrgent) pointsEarned += prev.pointSettings.urgentBonus;
@@ -574,10 +593,27 @@ function useTaskStoreInternal() {
       if (prev.mentalHealth && prev.mentalHealth < 40) pointsEarned += 5; // Extra reward when mental health is low
       if (prev.energyLevel === 'low') pointsEarned += 5; // Extra reward when energy is low
 
+      let streakHistory = prev.streakHistory;
+      if (isImportant || isIvy1) {
+        const reason: StreakReason = isImportant && isIvy1 ? 'both' : isImportant ? 'important' : 'ivy1';
+        const idx = prev.streakHistory.findIndex(r => r.date === dayISO);
+        if (idx >= 0) {
+          const current = prev.streakHistory[idx];
+          const merged: StreakReason =
+            current.reason === reason ? current.reason :
+            current.reason === 'both' || reason === 'both' ? 'both' :
+            'both';
+          streakHistory = prev.streakHistory.map((r, i) => (i === idx ? { ...r, reason: merged } : r));
+        } else {
+          streakHistory = [...prev.streakHistory, { date: dayISO, reason }];
+        }
+      }
+
       return {
         ...prev,
         points: prev.points + pointsEarned,
-        tasks: prev.tasks.map(t => t.id === taskId ? { ...t, status: 'done', completedAt: new Date().toISOString() } : t),
+        streakHistory,
+        tasks: prev.tasks.map(t => t.id === taskId ? { ...t, status: 'done', completedAt } : t),
       };
     });
   };
@@ -707,6 +743,25 @@ function useTaskStoreInternal() {
     if (state.weeklyReviews.length === 0) return null;
     const sorted = [...state.weeklyReviews].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
     return sorted[0] || null;
+  };
+
+  const getStreakForDate = (dateISO: string) => {
+    return state.streakHistory.find(r => r.date === dateISO) || null;
+  };
+
+  const getCurrentStreak = () => {
+    if (!state.streakHistory || state.streakHistory.length === 0) return 0;
+    const set = new Set(state.streakHistory.map(r => r.date));
+    let d = new Date();
+    d.setHours(0, 0, 0, 0);
+    let count = 0;
+    while (true) {
+      const iso = d.toISOString().split('T')[0];
+      if (!set.has(iso)) break;
+      count += 1;
+      d.setDate(d.getDate() - 1);
+    }
+    return count;
   };
 
   const getTopTask = (): Task | null => {
@@ -910,6 +965,8 @@ function useTaskStoreInternal() {
     upsertWeeklyReview,
     hasWeeklyReviewForCurrentWeek,
     getLatestWeeklyReview,
+    getStreakForDate,
+    getCurrentStreak,
     getTopTask,
     syncData,
   };
