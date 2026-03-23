@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { X, Key, MessageSquare, Trash2, ExternalLink, Image as ImageIcon, Palette, Video, Star, Loader2 } from 'lucide-react';
+import { X, Key, MessageSquare, Trash2, ExternalLink, Image as ImageIcon, Palette, Video, Star, Loader2, Activity } from 'lucide-react';
 import { useTaskStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
+import ChronotypeModal from '@/components/ChronotypeModal';
 
 interface Props {
   onClose: () => void;
 }
 
 export default function SettingsModal({ onClose }: Props) {
-  const { apiKeys, setApiKeys, customPrompt, setCustomPrompt, clearAllData, backgroundType, backgroundValue, backgroundIsPublic, setBackground, pointSettings, setPointSettings } = useTaskStore();
+  const { apiKeys, setApiKeys, customPrompt, setCustomPrompt, clearAllData, backgroundType, backgroundValue, backgroundIsPublic, setBackground, pointSettings, setPointSettings, chronotype, chronotypeUpdatedAt } = useTaskStore();
   
   const [keysInput, setKeysInput] = useState(apiKeys.join('\n'));
   const [promptInput, setPromptInput] = useState(customPrompt);
@@ -22,6 +23,15 @@ export default function SettingsModal({ onClose }: Props) {
   const [bgTab, setBgTab] = useState<'custom' | 'templates'>('custom');
   const [publicTemplates, setPublicTemplates] = useState<{id: string, type: string, value: string, name: string}[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [showChronotype, setShowChronotype] = useState(false);
+
+  const chronotypeLabel = () => {
+    if (!chronotype) return 'Chưa thiết lập';
+    if (chronotype === 'lion') return 'Sư tử';
+    if (chronotype === 'bear') return 'Gấu';
+    if (chronotype === 'wolf') return 'Sói';
+    return 'Cá heo';
+  };
 
   const defaultTemplates = [
     { id: 't1', type: 'image', value: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1000&auto=format&fit=crop', name: 'Bãi biển' },
@@ -165,6 +175,26 @@ export default function SettingsModal({ onClose }: Props) {
                 <label className="block text-xs text-zinc-500 mb-1">Thưởng gấp</label>
                 <input type="number" value={points.urgentBonus} onChange={e => setPoints({...points, urgentBonus: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 text-sm" />
               </div>
+            </div>
+          </div>
+
+          <div className="pt-6 border-t border-zinc-800">
+            <h3 className="text-sm font-medium text-zinc-300 mb-4 flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Nhịp sinh học
+            </h3>
+            <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-zinc-200 truncate">Chronotype: {chronotypeLabel()}</div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  {chronotypeUpdatedAt ? `Cập nhật: ${new Date(chronotypeUpdatedAt).toLocaleString('vi-VN')}` : 'Làm khảo sát 4 câu để cá nhân hoá gợi ý task'}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowChronotype(true)}
+                className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
+              >
+                Khảo sát
+              </button>
             </div>
           </div>
 
@@ -313,6 +343,10 @@ export default function SettingsModal({ onClose }: Props) {
           </button>
         </div>
       </motion.div>
+
+      {showChronotype && (
+        <ChronotypeModal onClose={() => setShowChronotype(false)} />
+      )}
     </div>
   );
 }
