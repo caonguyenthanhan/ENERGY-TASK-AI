@@ -309,12 +309,159 @@ const initialState: AppState = {
   mentalHealth: 50,
 };
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function mergeUniqueStrings(a: unknown, b: unknown): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of [...asArray<unknown>(a), ...asArray<unknown>(b)]) {
+    const s = String(v || '').trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+function mergeByKey<T>(
+  local: unknown,
+  remote: unknown,
+  getKey: (item: T) => string,
+  pick: (localItem: T, remoteItem: T) => T
+): T[] {
+  const map = new Map<string, T>();
+  for (const item of asArray<T>(local)) {
+    const key = getKey(item);
+    if (!key) continue;
+    map.set(key, item);
+  }
+  for (const item of asArray<T>(remote)) {
+    const key = getKey(item);
+    if (!key) continue;
+    const existing = map.get(key);
+    map.set(key, existing ? pick(existing, item) : item);
+  }
+  return Array.from(map.values());
+}
+
+function isoToTime(value: unknown): number {
+  if (typeof value !== 'string') return Number.NaN;
+  const t = new Date(value).getTime();
+  return Number.isFinite(t) ? t : Number.NaN;
+}
+
+function weeklyReviewEquals(a: WeeklyReview, b: WeeklyReview): boolean {
+  return (
+    a.weekStart === b.weekStart &&
+    a.healthPercent === b.healthPercent &&
+    a.mentalPercent === b.mentalPercent &&
+    a.lastWeekNote === b.lastWeekNote &&
+    a.nextWeekNote === b.nextWeekNote &&
+    a.createdAt === b.createdAt
+  );
+}
+
+function mergeWeeklyReviews(local: unknown, remote: unknown): { merged: WeeklyReview[]; differsFromRemote: boolean } {
+  const merged = mergeByKey<WeeklyReview>(
+    local,
+    remote,
+    (r) => (r?.weekStart ? String(r.weekStart) : ''),
+    (l, r) => {
+      const lt = isoToTime(l.createdAt);
+      const rt = isoToTime(r.createdAt);
+      if (Number.isFinite(lt) && Number.isFinite(rt)) return rt >= lt ? r : l;
+      if (Number.isFinite(rt)) return r;
+      if (Number.isFinite(lt)) return l;
+      return r;
+    }
+  ).filter((r) => typeof r?.weekStart === 'string');
+
+  const remoteArr = asArray<WeeklyReview>(remote).filter((r) => typeof r?.weekStart === 'string');
+  const remoteMap = new Map<string, WeeklyReview>();
+  for (const r of remoteArr) remoteMap.set(r.weekStart, r);
+  let differsFromRemote = merged.length !== remoteArr.length;
+  if (!differsFromRemote) {
+    for (const m of merged) {
+      const rr = remoteMap.get(m.weekStart);
+      if (!rr || !weeklyReviewEquals(m, rr)) {
+        differsFromRemote = true;
+        break;
+      }
+    }
+  }
+  return { merged, differsFromRemote };
+}
+
+function mergeAppState(local: AppState, remote: any): { merged: AppState; shouldPushRemote: boolean } {
+  const base: AppState = { ...local, ...(remote && typeof remote === 'object' ? remote : {}) };
+
+  const tasks = mergeByKey<Task>(local.tasks, remote?.tasks, (t) => String(t?.id || ''), (_l, r) => r);
+  const lists = mergeByKey<TaskList>(local.lists, remote?.lists, (l) => String(l?.id || ''), (_l, r) => r);
+  const energyHistory = mergeByKey<EnergyRecord>(
+    local.energyHistory,
+    remote?.energyHistory,
+    (r) => `${String(r?.date || '')}__${String(r?.session || '')}`,
+    (_l, r) => r
+  );
+  const moodHistory = mergeByKey<MoodRecord>(local.moodHistory, remote?.moodHistory, (r) => String(r?.date || ''), (_l, r) => r);
+  const dailyTopSix = mergeByKey<DailyTopSixRecord>(
+    local.dailyTopSix,
+    remote?.dailyTopSix,
+    (r) => String(r?.date || ''),
+    (_l, r) => r
+  );
+  const streakHistory = mergeByKey<StreakRecord>(local.streakHistory, remote?.streakHistory, (r) => String(r?.date || ''), (_l, r) => r);
+  const morningAdherenceHistory = mergeByKey<MorningAdherenceRecord>(
+    local.morningAdherenceHistory,
+    remote?.morningAdherenceHistory,
+    (r) => String(r?.date || ''),
+    (_l, r) => r
+  );
+  const weekly = mergeWeeklyReviews(local.weeklyReviews, remote?.weeklyReviews);
+
+  const merged: AppState = {
+    ...base,
+    tasks,
+    lists,
+    energyHistory,
+    moodHistory,
+    dailyTopSix,
+    streakHistory,
+    morningAdherenceHistory,
+    weeklyReviews: weekly.merged,
+    apiKeys: mergeUniqueStrings(local.apiKeys, remote?.apiKeys),
+  };
+
+  return { merged, shouldPushRemote: weekly.differsFromRemote };
+}
+
 function useTaskStoreInternal() {
   const [state, setState] = useState<AppState>(initialState);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [user, setUser] = useState<any>(null);
   const isRemoteUpdate = React.useRef(false);
+  const stateRef = React.useRef<AppState>(initialState);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const upsertRemoteState = async (userId: string, nextState: AppState) => {
+    await supabase
+      .from('user_data')
+      .upsert(
+        {
+          user_id: userId,
+          state: nextState,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+  };
 
   // Load initial state from localStorage
   useEffect(() => {
@@ -428,14 +575,22 @@ function useTaskStoreInternal() {
 
   // Real-time Supabase Subscription
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isLoaded) return;
 
     const fetchInitial = async () => {
       const { data } = await supabase.from('user_data').select('state').eq('user_id', user.id).single();
       if (data?.state) {
-        isRemoteUpdate.current = true;
         const parsedRemote = typeof data.state === 'string' ? JSON.parse(data.state) : data.state;
-        setState(prev => ({ ...prev, ...parsedRemote }));
+        const { merged, shouldPushRemote } = mergeAppState(stateRef.current, parsedRemote);
+        isRemoteUpdate.current = true;
+        setState(merged);
+        if (shouldPushRemote) {
+          try {
+            await upsertRemoteState(user.id, merged);
+          } catch (e) {
+            console.error('Remote merge upsert failed:', e);
+          }
+        }
       }
     };
     fetchInitial();
@@ -452,10 +607,14 @@ function useTaskStoreInternal() {
         },
         (payload) => {
           if (payload.new && (payload.new as any).state) {
-            isRemoteUpdate.current = true;
             const newState = (payload.new as any).state;
             const parsedRemote = typeof newState === 'string' ? JSON.parse(newState) : newState;
-            setState(prev => ({ ...prev, ...parsedRemote }));
+            const { merged, shouldPushRemote } = mergeAppState(stateRef.current, parsedRemote);
+            isRemoteUpdate.current = true;
+            setState(merged);
+            if (shouldPushRemote) {
+              upsertRemoteState(user.id, merged).catch((e) => console.error('Remote merge upsert failed:', e));
+            }
           }
         }
       )
@@ -464,7 +623,7 @@ function useTaskStoreInternal() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, isLoaded]);
 
   // Auto-sync to Supabase
   useEffect(() => {
@@ -921,16 +1080,11 @@ function useTaskStoreInternal() {
         throw fetchError;
       }
 
-      let mergedState = { ...state };
-
-      if (remoteData?.state) {
-        // Simple merge: remote takes precedence for now, or we can just use remote if it's newer
-        // For simplicity, we'll just overwrite local state with remote if remote exists
-        // A better approach would be to merge tasks by ID, but this works for a basic sync
-        const parsedRemote = typeof remoteData.state === 'string' ? JSON.parse(remoteData.state) : remoteData.state;
-        mergedState = { ...mergedState, ...parsedRemote };
-        setState(mergedState);
-      }
+      const parsedRemote = remoteData?.state
+        ? (typeof remoteData.state === 'string' ? JSON.parse(remoteData.state) : remoteData.state)
+        : null;
+      const { merged: mergedState } = mergeAppState(stateRef.current, parsedRemote);
+      setState(mergedState);
 
       // Save merged state back to remote
       const { error: upsertError } = await supabase
