@@ -20,6 +20,9 @@ import IvyLeeModal from '@/components/IvyLeeModal';
 import ChatBot from '@/components/ChatBot';
 import TaskList from '@/components/TaskList';
 import CelebrationModal from '@/components/CelebrationModal';
+import LockedFeatureModal from '@/components/LockedFeatureModal';
+import { FeatureKey, getFeatureLabel, getRequiredPoints, isFeatureUnlocked } from '@/lib/features';
+import { APP_NAME } from '@/lib/app-config';
 import confetti from 'canvas-confetti';
 
 export default function Home() {
@@ -39,6 +42,7 @@ export default function Home() {
     tasks,
     updateTask,
     weeklyReviews,
+    user,
   } = useTaskStore();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -48,11 +52,18 @@ export default function Home() {
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showIvyLee, setShowIvyLee] = useState(false);
+  const [lockedFeature, setLockedFeature] = useState<FeatureKey | null>(null);
   const hasCelebrated = useRef(false);
   const currentStreak = getCurrentStreak();
+  const email = user?.email as string | undefined;
+  const confettiEnabled = isFeatureUnlocked({ feature: 'confetti', points, email });
+  const weeklyReportEnabled = isFeatureUnlocked({ feature: 'weeklyReport', points, email });
+  const weeklyReviewEnabled = isFeatureUnlocked({ feature: 'weeklyReview', points, email });
+  const celebrationEnabled = isFeatureUnlocked({ feature: 'celebration', points, email });
+  const chatbotEnabled = isFeatureUnlocked({ feature: 'chatbot', points, email });
 
   useEffect(() => {
-    if (isLoaded && points >= pointGoal && !hasCelebrated.current) {
+    if (isLoaded && celebrationEnabled && points >= pointGoal && !hasCelebrated.current) {
       const timer = setTimeout(() => {
         setShowCelebration(true);
       }, 0);
@@ -61,7 +72,7 @@ export default function Home() {
     } else if (isLoaded && points < pointGoal) {
       hasCelebrated.current = false;
     }
-  }, [points, pointGoal, isLoaded]);
+  }, [points, pointGoal, isLoaded, celebrationEnabled]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -72,11 +83,11 @@ export default function Home() {
     d.setDate(d.getDate() + diff);
     const weekStart = d.toISOString().split('T')[0];
 
-    if (!weeklyReviews.some(r => r.weekStart === weekStart)) {
+    if (weeklyReviewEnabled && !weeklyReviews.some(r => r.weekStart === weekStart)) {
       const t = setTimeout(() => setShowWeeklyReview(true), 0);
       return () => clearTimeout(t);
     }
-  }, [isLoaded, weeklyReviews]);
+  }, [isLoaded, weeklyReviews, weeklyReviewEnabled]);
 
   const handleAddManual = () => {
     const t = addManualTask({ title: 'Công việc mới', deadline: null, durationMinutes: 30 });
@@ -85,12 +96,14 @@ export default function Home() {
 
   const handleCompleteTask = (taskId: string) => {
     completeTask(taskId);
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6']
-    });
+    if (confettiEnabled) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6']
+      });
+    }
   };
 
   if (!isLoaded) {
@@ -116,11 +129,10 @@ export default function Home() {
             <Zap className="w-5 h-5 text-indigo-400" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Energy-Task AI</h1>
+            <h1 className="text-xl font-semibold tracking-tight">{APP_NAME}</h1>
             <p className="text-xs text-zinc-500">Quản lý kỷ luật nhưng thấu hiểu</p>
           </div>
         </div>
-
         <div className="flex items-center gap-4">
           <Link href="/schedule" className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors">
             <Calendar className="w-4 h-4 text-emerald-500" />
@@ -135,7 +147,7 @@ export default function Home() {
             <span className="text-sm font-medium text-zinc-300">{currentStreak} streak</span>
           </div>
           <button
-            onClick={() => setShowReport(true)}
+            onClick={() => (weeklyReportEnabled ? setShowReport(true) : setLockedFeature('weeklyReport'))}
             className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 transition-colors"
             title="Báo cáo tuần"
           >
@@ -248,8 +260,16 @@ export default function Home() {
             onClose={() => setShowCelebration(false)}
           />
         )}
+        {lockedFeature && (
+          <LockedFeatureModal
+            title={getFeatureLabel(lockedFeature)}
+            requiredPoints={getRequiredPoints(lockedFeature)}
+            currentPoints={points}
+            onClose={() => setLockedFeature(null)}
+          />
+        )}
       </AnimatePresence>
-      <ChatBot />
+      {chatbotEnabled && <ChatBot />}
     </main>
   );
 }
