@@ -71,6 +71,7 @@ export type Task = {
     ivyLeeRank?: number;
   };
   timerStatus?: 'idle' | 'running' | 'paused';
+  timerPhase?: 'focus' | 'break';
   timerStartedAt?: string | null;
   timerRemaining?: number;
 };
@@ -186,6 +187,11 @@ function normalizeTaskPatch(patch: Partial<Task>): Partial<Task> {
   if ('startAfterPrerequisiteDays' in out) {
     const n = Number(out.startAfterPrerequisiteDays);
     out.startAfterPrerequisiteDays = n === 1 ? 1 : 0;
+  }
+
+  if ('timerPhase' in out) {
+    const p = out.timerPhase;
+    out.timerPhase = p === 'break' || p === 'focus' ? p : 'focus';
   }
 
   return out;
@@ -350,6 +356,7 @@ function useTaskStoreInternal() {
               isRoutine: t.isRoutine ?? false,
               prerequisiteTaskId: t.prerequisiteTaskId ? String(t.prerequisiteTaskId) : null,
               startAfterPrerequisiteDays: Number(t.startAfterPrerequisiteDays) === 1 ? 1 : 0,
+              timerPhase: t.timerPhase === 'break' ? 'break' : 'focus',
               status: t.status === 'todo' || t.status === 'done' || t.status === 'skipped' ? t.status : 'todo',
             })) : [];
             

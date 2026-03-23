@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { X, BarChart2, Activity } from 'lucide-react';
+import { X, BarChart2, Activity, Sun, Moon, Coffee, Clock, Smile, Meh, Frown, Flame, AlertTriangle, SplitSquareHorizontal } from 'lucide-react';
 import { useTaskStore } from '@/lib/store';
 import {
   BarChart,
@@ -41,7 +41,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function WeeklyReportModal({ onClose }: Props) {
-  const { tasks, energyHistory } = useTaskStore();
+  const { tasks, energyHistory, moodHistory, morningAdherenceHistory, chronotype } = useTaskStore();
 
   // Generate last 7 days data
   const getLast7Days = () => {
@@ -57,6 +57,55 @@ export default function WeeklyReportModal({ onClose }: Props) {
   };
 
   const days = getLast7Days();
+
+  const moodLabel = (mood: any) => {
+    if (!mood) return '—';
+    if (mood === 'excited') return 'Hưng phấn';
+    if (mood === 'neutral') return 'Bình thường';
+    if (mood === 'anxious') return 'Lo âu';
+    if (mood === 'sad') return 'Buồn';
+    if (mood === 'angry') return 'Tức giận';
+    return '—';
+  };
+
+  const moodIcon = (mood: any) => {
+    if (mood === 'excited') return <Smile className="w-4 h-4 text-emerald-400" />;
+    if (mood === 'neutral') return <Meh className="w-4 h-4 text-zinc-400" />;
+    if (mood === 'anxious') return <AlertTriangle className="w-4 h-4 text-amber-400" />;
+    if (mood === 'sad') return <Frown className="w-4 h-4 text-blue-400" />;
+    if (mood === 'angry') return <Flame className="w-4 h-4 text-rose-400" />;
+    return <span className="w-4 h-4" />;
+  };
+
+  const chronotypeLabel = () => {
+    if (!chronotype) return '—';
+    if (chronotype === 'lion') return 'Sư tử';
+    if (chronotype === 'bear') return 'Gấu';
+    if (chronotype === 'wolf') return 'Sói';
+    return 'Cá heo';
+  };
+
+  const sessionIcon = (session: string) => {
+    if (session === 'morning') return <Sun className="w-3.5 h-3.5 text-amber-400" />;
+    if (session === 'noon') return <Coffee className="w-3.5 h-3.5 text-amber-300" />;
+    if (session === 'afternoon') return <Clock className="w-3.5 h-3.5 text-indigo-300" />;
+    if (session === 'evening') return <Moon className="w-3.5 h-3.5 text-indigo-400" />;
+    return <Moon className="w-3.5 h-3.5 text-zinc-500" />;
+  };
+
+  const energyLabel = (level: any) => {
+    if (level === 'high') return 'Cao';
+    if (level === 'normal') return 'TB';
+    if (level === 'low') return 'Thấp';
+    return '—';
+  };
+
+  const energyClass = (level: any) => {
+    if (level === 'high') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
+    if (level === 'normal') return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
+    if (level === 'low') return 'bg-rose-500/10 text-rose-300 border-rose-500/20';
+    return 'bg-zinc-800 text-zinc-400 border-zinc-700';
+  };
 
   const chartData = days.map((day) => {
     // Count tasks completed on this day
@@ -112,6 +161,34 @@ export default function WeeklyReportModal({ onClose }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-8">
+          <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-4 sm:p-6">
+            <h3 className="text-sm font-medium text-zinc-300 mb-4 flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-indigo-400" />
+              Tổng quan 7 ngày
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                <div className="text-xs text-zinc-500">Chronotype</div>
+                <div className="text-lg font-semibold text-zinc-100 mt-1">{chronotypeLabel()}</div>
+              </div>
+              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                <div className="text-xs text-zinc-500">Mood hôm nay</div>
+                <div className="mt-2 flex items-center gap-2">
+                  {moodIcon(moodHistory?.find((m: any) => m.date === new Date().toISOString().split('T')[0])?.mood)}
+                  <div className="text-sm text-zinc-200">
+                    {moodLabel(moodHistory?.find((m: any) => m.date === new Date().toISOString().split('T')[0])?.mood)}
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                <div className="text-xs text-zinc-500">Checklist buổi sáng</div>
+                <div className="text-lg font-semibold text-zinc-100 mt-1">
+                  {(morningAdherenceHistory?.find((r: any) => r.date === new Date().toISOString().split('T')[0])?.completed?.length ?? 0)} mục
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Tasks Chart */}
           <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-4 sm:p-6">
             <h3 className="text-sm font-medium text-zinc-300 mb-6 flex items-center gap-2">
@@ -167,6 +244,52 @@ export default function WeeklyReportModal({ onClose }: Props) {
                   />
                 </LineChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-4 sm:p-6">
+            <h3 className="text-sm font-medium text-zinc-300 mb-4 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-indigo-400" />
+              Energy/Mood/Adherence theo ngày
+            </h3>
+            <div className="space-y-3">
+              {days.map((day) => {
+                const energies = (energyHistory || []).filter((r: any) => r.date === day.dateStr);
+                const mood = (moodHistory || []).find((m: any) => m.date === day.dateStr)?.mood ?? null;
+                const adherence = (morningAdherenceHistory || []).find((a: any) => a.date === day.dateStr)?.completed ?? [];
+
+                const sessions = ['morning', 'noon', 'afternoon', 'evening', 'late_night'];
+                const bySession: Record<string, any> = {};
+                for (const e of energies) {
+                  const key = e.session || 'morning';
+                  bySession[key] = e.level;
+                }
+
+                return (
+                  <div key={day.dateStr} className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium text-zinc-200">{day.dateStr}</div>
+                      <div className="flex items-center gap-2">
+                        {moodIcon(mood)}
+                        <div className="text-xs text-zinc-400">{moodLabel(mood)}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {sessions.map(s => (
+                        <div key={s} className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs ${energyClass(bySession[s])}`}>
+                          {sessionIcon(s)}
+                          {energyLabel(bySession[s])}
+                        </div>
+                      ))}
+                      <div className="inline-flex items-center gap-2 px-2 py-1 rounded-lg border bg-zinc-900 border-zinc-800 text-xs text-zinc-300">
+                        <SplitSquareHorizontal className="w-3.5 h-3.5 text-emerald-400" />
+                        Checklist: {Array.isArray(adherence) ? adherence.length : 0}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
