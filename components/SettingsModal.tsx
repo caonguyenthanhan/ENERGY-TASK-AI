@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import ChronotypeModal from '@/components/ChronotypeModal';
 import LockedFeatureModal from '@/components/LockedFeatureModal';
 import { FeatureKey, getFeatureLabel, getRequiredPoints, isFeatureUnlocked } from '@/lib/features';
+import NextImage from 'next/image';
 
 interface Props {
   onClose: () => void;
@@ -424,7 +425,14 @@ export default function SettingsModal({ onClose }: Props) {
                         ) : t.type === 'video' ? (
                           <video src={t.value} className="absolute inset-0 w-full h-full object-cover" muted loop playsInline />
                         ) : (
-                          <img src={t.value} alt={t.name} className="absolute inset-0 w-full h-full object-cover" />
+                          <NextImage
+                            src={t.value}
+                            alt={t.name}
+                            fill
+                            sizes="(max-width: 640px) 50vw, 33vw"
+                            unoptimized
+                            className="object-cover"
+                          />
                         )}
                         <div className="absolute inset-x-0 bottom-0 bg-black/50 p-2">
                           <p className="text-xs text-white font-medium truncate">{t.name}</p>
