@@ -56,6 +56,8 @@ export type Task = {
   resources?: string[];
   listId?: string | null;
   energyRequired?: EnergyLevel;
+  prerequisiteTaskId?: string | null;
+  startAfterPrerequisiteDays?: 0 | 1;
   subtasks: Subtask[];
   createdAt: string;
   completedAt: string | null;
@@ -175,6 +177,15 @@ function normalizeTaskPatch(patch: Partial<Task>): Partial<Task> {
 
   if ('listId' in out) {
     out.listId = out.listId ? String(out.listId) : null;
+  }
+
+  if ('prerequisiteTaskId' in out) {
+    out.prerequisiteTaskId = out.prerequisiteTaskId ? String(out.prerequisiteTaskId) : null;
+  }
+
+  if ('startAfterPrerequisiteDays' in out) {
+    const n = Number(out.startAfterPrerequisiteDays);
+    out.startAfterPrerequisiteDays = n === 1 ? 1 : 0;
   }
 
   return out;
@@ -337,6 +348,8 @@ function useTaskStoreInternal() {
               isImportant: t.isImportant ?? false,
               isUrgent: t.isUrgent ?? false,
               isRoutine: t.isRoutine ?? false,
+              prerequisiteTaskId: t.prerequisiteTaskId ? String(t.prerequisiteTaskId) : null,
+              startAfterPrerequisiteDays: Number(t.startAfterPrerequisiteDays) === 1 ? 1 : 0,
               status: t.status === 'todo' || t.status === 'done' || t.status === 'skipped' ? t.status : 'todo',
             })) : [];
             
@@ -507,6 +520,8 @@ function useTaskStoreInternal() {
       isUrgent: Boolean(pt.isUrgent),
       isRoutine: Boolean(pt.isRoutine),
       resources: Array.isArray(pt.resources) ? pt.resources.map(r => String(r).trim()).filter(Boolean) : [],
+      prerequisiteTaskId: null,
+      startAfterPrerequisiteDays: 0,
       id: uuidv4(),
       subtasks: [],
       createdAt: new Date().toISOString(),
@@ -514,6 +529,29 @@ function useTaskStoreInternal() {
       status: 'todo',
     }));
     setState(prev => ({ ...prev, tasks: [...prev.tasks, ...newTasks] }));
+  };
+
+  const addManualTask = (seed: Partial<Task> = {}) => {
+    const task: Task = {
+      id: uuidv4(),
+      title: typeof seed.title === 'string' ? seed.title.trim() || 'Công việc không tên' : 'Công việc không tên',
+      deadline: seed.deadline === null ? null : normalizeDeadline(seed.deadline ?? null),
+      durationMinutes: normalizeDurationForNewTask(seed.durationMinutes, 30),
+      isImportant: Boolean(seed.isImportant),
+      isUrgent: Boolean(seed.isUrgent),
+      isRoutine: Boolean(seed.isRoutine),
+      resources: Array.isArray(seed.resources) ? seed.resources.map(r => String(r).trim()).filter(Boolean) : [],
+      listId: seed.listId ? String(seed.listId) : null,
+      energyRequired: seed.energyRequired as any,
+      prerequisiteTaskId: seed.prerequisiteTaskId ? String(seed.prerequisiteTaskId) : null,
+      startAfterPrerequisiteDays: Number(seed.startAfterPrerequisiteDays) === 1 ? 1 : 0,
+      subtasks: Array.isArray(seed.subtasks) ? seed.subtasks : [],
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      status: 'todo',
+    };
+    setState(prev => ({ ...prev, tasks: [...prev.tasks, task] }));
+    return task;
   };
 
   const completeTask = (taskId: string) => {
@@ -548,6 +586,16 @@ function useTaskStoreInternal() {
   const updateTask = (taskId: string, updates: Partial<Task>) => {
     const normalized = normalizeTaskPatch(updates);
     setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === taskId ? { ...t, ...normalized } : t) }));
+  };
+
+  const deleteTask = (taskId: string) => {
+    setState(prev => {
+      const tasks = prev.tasks
+        .filter(t => t.id !== taskId)
+        .map(t => (t.prerequisiteTaskId === taskId ? { ...t, prerequisiteTaskId: null, startAfterPrerequisiteDays: 0 as 0 } : t));
+      const dailyTopSix = prev.dailyTopSix.map(r => ({ ...r, taskIds: r.taskIds.filter(id => id !== taskId) }));
+      return { ...prev, tasks, dailyTopSix };
+    });
   };
 
   const reorderTasks = (sortedTaskIds: string[]) => {
@@ -659,19 +707,35 @@ function useTaskStoreInternal() {
     const activeTasks = state.tasks.filter(t => t.status === 'todo');
     if (activeTasks.length === 0) return null;
 
+    const isBlocked = (task: Task) => {
+      if (!task.prerequisiteTaskId) return false;
+      const prereq = state.tasks.find(t => t.id === task.prerequisiteTaskId);
+      if (!prereq) return false;
+      if (prereq.status !== 'done') return true;
+      if (task.startAfterPrerequisiteDays !== 1) return false;
+      if (!prereq.completedAt) return false;
+      const done = new Date(prereq.completedAt);
+      done.setHours(0, 0, 0, 0);
+      const available = new Date(done);
+      available.setDate(available.getDate() + 1);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      return now.getTime() < available.getTime();
+    };
+
     const todayISO = new Date().toISOString().split('T')[0];
     const ivy = state.dailyTopSix.find(r => r.date === todayISO);
     if (ivy && ivy.taskIds.length > 0) {
       for (let i = 0; i < ivy.taskIds.length; i += 1) {
         const id = ivy.taskIds[i];
         const t = activeTasks.find(x => x.id === id);
-        if (t) {
+        if (t && !isBlocked(t)) {
           return { ...t, scoreBreakdown: { ...(t.scoreBreakdown || {}), ivyLeeRank: i + 1 } };
         }
       }
     }
 
-    const scoredTasks = activeTasks.map(task => {
+    const scoredTasks = activeTasks.filter(t => !isBlocked(t)).map(task => {
       let score = 0;
       const now = new Date().getTime();
       let chronotypeBonus = 0;
@@ -823,10 +887,12 @@ function useTaskStoreInternal() {
     deleteList,
     clearAllData,
     addTasks,
+    addManualTask,
     completeTask,
     skipTask,
     resetSkippedTasks,
     updateTask,
+    deleteTask,
     reorderTasks,
     setDailyTopSixForToday,
     clearDailyTopSixForToday,

@@ -27,6 +27,17 @@ const formatDate = (dateString: string | null) => {
   }
 };
 
+const getQuotaErrorHint = (error: any) => {
+  const raw = String(error?.message || '');
+  const json = String(error?.error ? JSON.stringify(error.error) : '');
+  const combined = `${raw}\n${json}`.toLowerCase();
+  const isQuota = combined.includes('resource_exhausted') || combined.includes('quota') || combined.includes('exceeded your current quota') || combined.includes('429');
+  if (!isQuota) return null;
+  const m = combined.match(/retry in\s+([0-9.]+)s/);
+  const retrySeconds = m ? Number(m[1]) : null;
+  return { retrySeconds: Number.isFinite(retrySeconds as any) ? retrySeconds : null };
+};
+
 export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hideFilters = false }: Props) {
   const [activeTab, setActiveTab] = useState<'todo' | 'done'>('todo');
   const [filterImportant, setFilterImportant] = useState(false);
@@ -39,7 +50,7 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
   const [showListManager, setShowListManager] = useState(false);
   const [newListName, setNewListName] = useState('');
 
-  const { tasks, resetSkippedTasks, lists, addList, updateTask, deleteList, apiKeys, customPrompt, reorderTasks } = useTaskStore();
+  const { tasks, resetSkippedTasks, lists, addList, updateTask, deleteTask, deleteList, apiKeys, customPrompt, reorderTasks } = useTaskStore();
 
   const handleAddList = () => {
     if (newListName.trim()) {
@@ -70,7 +81,16 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
       }
     } catch (error) {
       console.error("Failed to organize tasks:", error);
-      alert("Có lỗi xảy ra khi sắp xếp công việc bằng AI.");
+      const hint = getQuotaErrorHint(error);
+      if (hint) {
+        alert(
+          `Không thể dùng AI lúc này do đã vượt quota/rate limit của Gemini API (tính theo project, không theo từng API key).\n` +
+          `Quota có các ngưỡng RPM/TPM/RPD; nếu vượt sẽ bị chặn và có thể cần chờ reset.\n` +
+          `Gợi ý: bật billing/upgrade tier trong Google AI Studio, hoặc thử lại sau${hint.retrySeconds ? ` ~${hint.retrySeconds}s` : ''}.`
+        );
+      } else {
+        alert("Có lỗi xảy ra khi sắp xếp công việc bằng AI.");
+      }
     } finally {
       setIsOrganizing(false);
     }
@@ -89,7 +109,27 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
       }
     } catch (error) {
       console.error("Failed to sort tasks:", error);
-      alert("Có lỗi xảy ra khi sắp xếp ưu tiên bằng AI.");
+      const hint = getQuotaErrorHint(error);
+      const activeTasks = tasks.filter(t => t.status === 'todo');
+      if (hint && activeTasks.length > 0) {
+        const offline = [...activeTasks].sort((a, b) => {
+          const ad = a.deadline ? new Date(a.deadline).getTime() : Number.POSITIVE_INFINITY;
+          const bd = b.deadline ? new Date(b.deadline).getTime() : Number.POSITIVE_INFINITY;
+          if (ad !== bd) return ad - bd;
+          if (a.isImportant !== b.isImportant) return a.isImportant ? -1 : 1;
+          if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+        reorderTasks(offline.map(t => t.id));
+        setSortBy('createdAt');
+        alert(
+          `AI bị chặn do quota/rate limit của Gemini API (tính theo project).\n` +
+          `Đã sắp xếp offline theo hạn chót → quan trọng → gấp.\n` +
+          `Gợi ý: bật billing/upgrade tier trong Google AI Studio để dùng lại AI.`
+        );
+      } else {
+        alert("Có lỗi xảy ra khi sắp xếp ưu tiên bằng AI.");
+      }
     } finally {
       setIsSorting(false);
     }
@@ -282,6 +322,8 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
           <div className="flex flex-col gap-3 pb-4">
             {filteredTasks.map((task) => {
               const listName = lists.find(l => l.id === task.listId)?.name;
+              const prereq = task.prerequisiteTaskId ? tasks.find(t => t.id === task.prerequisiteTaskId) : null;
+              const prereqBlocked = prereq ? prereq.status !== 'done' : false;
               return (
                 <div
                   key={task.id}
@@ -309,6 +351,11 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
                         {listName}
                       </span>
                     )}
+                    {prereq && (
+                      <span className={`px-2 py-0.5 rounded ${prereqBlocked ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                        Tiền đề: {prereqBlocked ? 'chưa xong' : 'đã xong'}
+                      </span>
+                    )}
                     {formatDate(task.deadline) && (
                       <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
                         Hạn: {formatDate(task.deadline)}
@@ -321,6 +368,20 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
                       {task.status === 'todo' ? 'Cần làm' : task.status === 'done' ? 'Xong' : 'Bỏ qua'}
                     </span>
                   </div>
+                  {task.status !== 'done' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const ok = window.confirm('Xoá công việc này? Hành động không thể hoàn tác.');
+                        if (!ok) return;
+                        deleteTask(task.id);
+                      }}
+                      className="absolute bottom-4 left-4 p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors"
+                      title="Xoá"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                   {task.status === 'todo' && (
                     <button
                       onClick={(e) => {

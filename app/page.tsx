@@ -20,7 +20,6 @@ import IvyLeeModal from '@/components/IvyLeeModal';
 import ChatBot from '@/components/ChatBot';
 import TaskList from '@/components/TaskList';
 import CelebrationModal from '@/components/CelebrationModal';
-import { v4 as uuidv4 } from 'uuid';
 import confetti from 'canvas-confetti';
 
 export default function Home() {
@@ -29,6 +28,7 @@ export default function Home() {
     energyLevel,
     setEnergyLevel,
     addTasks,
+    addManualTask,
     completeTask,
     skipTask,
     resetSkippedTasks,
@@ -78,27 +78,8 @@ export default function Home() {
   }, [isLoaded, weeklyReviews]);
 
   const handleAddManual = () => {
-    const newTask: Task = {
-      id: uuidv4(),
-      title: 'Công việc mới',
-      deadline: null,
-      durationMinutes: 30,
-      isImportant: false,
-      isUrgent: false,
-      subtasks: [],
-      createdAt: new Date().toISOString(),
-      completedAt: null,
-      status: 'todo',
-    };
-    addTasks([{
-      title: 'Công việc mới',
-      deadline: null,
-      durationMinutes: 30,
-      isImportant: false,
-      isUrgent: false,
-    }]);
-    // The task will be added, we can then edit it
-    // We would ideally find the task we just added, but for simplicity, we can just open an empty modal or let the user click it.
+    const t = addManualTask({ title: 'Công việc mới', deadline: null, durationMinutes: 30 });
+    setEditingTask(t);
   };
 
   const handleCompleteTask = (taskId: string) => {
