@@ -49,16 +49,38 @@ interface Props {
 export default function ZenTask({ task, onComplete, onSkip }: Props) {
   const { apiKeys, customPrompt, tasks: allTasks, updateTask, chronotype } = useTaskStore();
   const defaultTime = task.durationMinutes ? task.durationMinutes * 60 : 25 * 60;
-  const [timeLeft, setTimeLeft] = useState(task.timerRemaining ?? defaultTime);
-  const [isActive, setIsActive] = useState(task.timerStatus === 'running');
+  const [tick, setTick] = useState(0);
+  const isActive = task.timerStatus === 'running';
   const [isBreakingDown, setIsBreakingDown] = useState(false);
   const [newSubtask, setNewSubtask] = useState('');
-  const [showTimerComplete, setShowTimerComplete] = useState(false);
+  const [timerModal, setTimerModal] = useState<'focus_done' | 'break_done' | null>(null);
   const chronoBonus = task.scoreBreakdown?.chronotypeBonus ?? 0;
   const chronoFit = task.scoreBreakdown?.chronotypeFit;
   const moodBonus = task.scoreBreakdown?.moodBonus ?? 0;
   const mood = task.scoreBreakdown?.mood ?? null;
   const ivyLeeRank = task.scoreBreakdown?.ivyLeeRank ?? null;
+  const timerPhase = task.timerPhase ?? 'focus';
+
+  const timeLeft = (() => {
+    const base = typeof task.timerRemaining === 'number' ? task.timerRemaining : defaultTime;
+    if (task.timerStatus === 'running' && task.timerStartedAt) {
+      const started = new Date(task.timerStartedAt).getTime();
+      const elapsed = Math.max(0, Math.floor((Date.now() - started) / 1000));
+      return Math.max(0, base - elapsed);
+    }
+    return Math.max(0, base);
+  })();
+
+  useEffect(() => {
+    if (task.timerStatus !== 'running') return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    const onVis = () => setTick(t => t + 1);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [task.timerStatus]);
 
   const chronotypeLabel = () => {
     if (!chronotype) return null;
@@ -77,50 +99,40 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
     return 'Tức giận';
   };
 
-  // Sync state from task props (e.g., when updated from another device)
   useEffect(() => {
-    if (task.timerStatus === 'running' && task.timerStartedAt) {
-      const elapsed = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
-      const remaining = Math.max(0, (task.timerRemaining ?? defaultTime) - elapsed);
-      setTimeLeft(remaining);
-      setIsActive(true);
-    } else {
-      setTimeLeft(task.timerRemaining ?? defaultTime);
-      setIsActive(false);
-    }
-  }, [task.timerStatus, task.timerStartedAt, task.timerRemaining, task.id, defaultTime]);
+    if (task.timerStatus !== 'running') return;
+    if (timeLeft !== 0) return;
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isActive && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((time) => time - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && isActive) {
-      setIsActive(false);
-      updateTask(task.id, { timerStatus: 'idle', timerRemaining: 0 });
-      playBeepSound();
-      setShowTimerComplete(true);
+    playBeepSound();
+
+    if (timerPhase === 'break') {
+      updateTask(task.id, { timerStatus: 'idle', timerStartedAt: null, timerRemaining: defaultTime, timerPhase: 'focus' });
+      setTimerModal('break_done');
+      return;
     }
-    return () => clearInterval(interval);
-  }, [isActive, timeLeft, task.id, updateTask]);
+
+    updateTask(task.id, { timerStatus: 'running', timerStartedAt: new Date().toISOString(), timerRemaining: 420, timerPhase: 'break' });
+    setTimerModal('focus_done');
+  }, [task.timerStatus, timeLeft, timerPhase, updateTask, task.id, defaultTime]);
 
   const toggleTimer = () => {
-    if (isActive) {
-      // Pause
-      updateTask(task.id, { timerStatus: 'paused', timerRemaining: timeLeft });
-    } else {
-      // Start
-      updateTask(task.id, { 
-        timerStatus: 'running', 
-        timerStartedAt: new Date().toISOString(), 
-        timerRemaining: timeLeft 
-      });
+    if (task.timerStatus === 'running') {
+      updateTask(task.id, { timerStatus: 'paused', timerRemaining: timeLeft, timerStartedAt: null });
+      return;
     }
+    updateTask(task.id, { timerStatus: 'running', timerStartedAt: new Date().toISOString(), timerRemaining: timeLeft, timerPhase });
   };
 
   const resetTimer = () => {
-    updateTask(task.id, { timerStatus: 'idle', timerRemaining: defaultTime });
+    updateTask(task.id, { timerStatus: 'idle', timerStartedAt: null, timerRemaining: defaultTime, timerPhase: 'focus' });
+  };
+
+  const start15Minutes = () => {
+    updateTask(task.id, { timerStatus: 'running', timerStartedAt: new Date().toISOString(), timerRemaining: 900, timerPhase: 'focus' });
+  };
+
+  const startFocus30 = () => {
+    updateTask(task.id, { timerStatus: 'running', timerStartedAt: new Date().toISOString(), timerRemaining: 1800, timerPhase: 'focus' });
   };
 
   const handleComplete = () => {
@@ -241,6 +253,11 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
 
       {/* Timer */}
       <div className="flex flex-col items-center mb-12">
+        {timerPhase === 'break' && (
+          <div className="mb-4 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 text-sm font-medium">
+            Nghỉ 7 phút
+          </div>
+        )}
         <div className="text-7xl font-mono font-light text-zinc-100 mb-6 tracking-tighter">
           {formatTime(timeLeft)}
         </div>
@@ -257,6 +274,24 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
           >
             <RotateCcw className="w-5 h-5" />
           </button>
+          {timerPhase !== 'break' && (
+            <button
+              onClick={start15Minutes}
+              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors"
+              title="Bắt đầu 15 phút"
+            >
+              15p
+            </button>
+          )}
+          {timerPhase !== 'break' && (
+            <button
+              onClick={startFocus30}
+              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors"
+              title="Focus 30 phút"
+            >
+              30p
+            </button>
+          )}
         </div>
       </div>
 
@@ -373,14 +408,14 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
       </div>
 
       <AnimatePresence>
-        {showTimerComplete && (
+        {timerModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => setShowTimerComplete(false)}
+              onClick={() => setTimerModal(null)}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -391,10 +426,16 @@ export default function ZenTask({ task, onComplete, onSkip }: Props) {
               <div className="w-16 h-16 rounded-full bg-indigo-500/20 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="w-8 h-8 text-indigo-400" />
               </div>
-              <h2 className="text-xl font-bold text-white mb-2">Hết giờ!</h2>
-              <p className="text-zinc-400 mb-6">Bạn đã hoàn thành phiên làm việc cho công việc này.</p>
+              <h2 className="text-xl font-bold text-white mb-2">
+                {timerModal === 'break_done' ? 'Nghỉ xong!' : 'Hết giờ!'}
+              </h2>
+              <p className="text-zinc-400 mb-6">
+                {timerModal === 'break_done'
+                  ? 'Sẵn sàng quay lại công việc.'
+                  : 'Bắt đầu nghỉ 7 phút để hồi phục.'}
+              </p>
               <button
-                onClick={() => setShowTimerComplete(false)}
+                onClick={() => setTimerModal(null)}
                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
               >
                 Đóng

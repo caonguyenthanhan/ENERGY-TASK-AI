@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Calendar, Clock, Activity, AlertCircle, AlertTriangle, RefreshCw, Link as LinkIcon, Plus, Trash2, Folder } from 'lucide-react';
+import { X, Calendar, Clock, Activity, AlertCircle, AlertTriangle, RefreshCw, Link as LinkIcon, Plus, Trash2, Folder, SplitSquareHorizontal, Loader2, CheckCircle2, Circle } from 'lucide-react';
 import { Task, useTaskStore } from '@/lib/store';
+import { breakDownTaskWithAI } from '@/lib/ai';
+import { v4 as uuidv4 } from 'uuid';
 
 interface Props {
   task: Task;
@@ -41,8 +43,11 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
   const [listId, setListId] = useState<string | null>(task.listId || null);
   const [prerequisiteTaskId, setPrerequisiteTaskId] = useState<string | null>(task.prerequisiteTaskId || null);
   const [startAfterPrereq, setStartAfterPrereq] = useState(task.startAfterPrerequisiteDays === 1);
+  const [subtasks, setSubtasks] = useState(task.subtasks || []);
+  const [newSubtask, setNewSubtask] = useState('');
+  const [isBreakingDown, setIsBreakingDown] = useState(false);
 
-  const { lists, tasks: allTasks, deleteTask } = useTaskStore();
+  const { lists, tasks: allTasks, apiKeys, customPrompt, deleteTask } = useTaskStore();
 
   const suggestions = useMemo(() => {
     const t = (title || '').toLowerCase();
@@ -116,8 +121,49 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
       listId,
       prerequisiteTaskId,
       startAfterPrerequisiteDays: prerequisiteTaskId ? (startAfterPrereq ? 1 : 0) : 0,
+      subtasks,
     });
     onClose();
+  };
+
+  const handleAddSubtask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubtask.trim()) return;
+    setSubtasks(prev => [...prev, { id: uuidv4(), title: newSubtask.trim(), isCompleted: false }]);
+    setNewSubtask('');
+  };
+
+  const toggleSubtask = (subId: string) => {
+    setSubtasks(prev => prev.map(s => s.id === subId ? { ...s, isCompleted: !s.isCompleted } : s));
+  };
+
+  const removeSubtask = (subId: string) => {
+    setSubtasks(prev => prev.filter(s => s.id !== subId));
+  };
+
+  const handleBreakDown = async () => {
+    setIsBreakingDown(true);
+    try {
+      const steps = await breakDownTaskWithAI(title.trim() || task.title, apiKeys, customPrompt, allTasks);
+      setSubtasks(prev => {
+        const existing = new Set(prev.map(s => s.title.trim().toLowerCase()));
+        const next = [...prev];
+        for (const step of steps) {
+          const t = String(step || '').trim();
+          if (!t) continue;
+          const key = t.toLowerCase();
+          if (existing.has(key)) continue;
+          existing.add(key);
+          next.push({ id: uuidv4(), title: t, isCompleted: false });
+        }
+        return next;
+      });
+    } catch (error: any) {
+      console.error(error);
+      alert(error.message || 'Lỗi khi chia nhỏ công việc.');
+    } finally {
+      setIsBreakingDown(false);
+    }
   };
 
   return (
@@ -290,6 +336,59 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
                 <Plus className="w-5 h-5" />
               </button>
             </div>
+          </div>
+
+          <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <SplitSquareHorizontal className="w-4 h-4 text-indigo-400" />
+                Chia nhỏ (subtasks)
+              </div>
+              <button
+                onClick={handleBreakDown}
+                disabled={isBreakingDown}
+                className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-2 disabled:opacity-50 transition-colors"
+              >
+                {isBreakingDown ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <SplitSquareHorizontal className="w-3.5 h-3.5" />}
+                AI chia nhỏ
+              </button>
+            </div>
+
+            {subtasks.length > 0 ? (
+              <div className="space-y-2 mb-3">
+                {subtasks.map(s => (
+                  <div key={s.id} className="flex items-start justify-between gap-3 p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl">
+                    <button onClick={() => toggleSubtask(s.id)} className={`mt-0.5 ${s.isCompleted ? 'text-emerald-400' : 'text-zinc-600 hover:text-zinc-300'} transition-colors`}>
+                      {s.isCompleted ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}
+                    </button>
+                    <div className={`text-sm flex-1 min-w-0 ${s.isCompleted ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
+                      {s.title}
+                    </div>
+                    <button onClick={() => removeSubtask(s.id)} className="text-zinc-500 hover:text-rose-400 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-zinc-500 italic mb-3">Chưa có bước nào.</div>
+            )}
+
+            <form onSubmit={handleAddSubtask} className="flex gap-2">
+              <input
+                value={newSubtask}
+                onChange={(e) => setNewSubtask(e.target.value)}
+                placeholder="Thêm bước nhỏ thủ công..."
+                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+              />
+              <button
+                type="submit"
+                disabled={!newSubtask.trim()}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                Thêm
+              </button>
+            </form>
           </div>
 
           <div>
