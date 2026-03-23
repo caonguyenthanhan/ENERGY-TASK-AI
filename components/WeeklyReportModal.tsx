@@ -41,7 +41,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function WeeklyReportModal({ onClose }: Props) {
-  const { tasks, energyHistory, moodHistory, morningAdherenceHistory, chronotype } = useTaskStore();
+  const { tasks, energyHistory, moodHistory, morningAdherenceHistory, chronotype, streakHistory, getCurrentStreak } = useTaskStore();
 
   // Generate last 7 days data
   const getLast7Days = () => {
@@ -181,9 +181,10 @@ export default function WeeklyReportModal({ onClose }: Props) {
                 </div>
               </div>
               <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
-                <div className="text-xs text-zinc-500">Checklist buổi sáng</div>
-                <div className="text-lg font-semibold text-zinc-100 mt-1">
-                  {(morningAdherenceHistory?.find((r: any) => r.date === new Date().toISOString().split('T')[0])?.completed?.length ?? 0)} mục
+                <div className="text-xs text-zinc-500">Streak hiện tại</div>
+                <div className="text-lg font-semibold text-zinc-100 mt-1">{getCurrentStreak()} ngày</div>
+                <div className="text-[11px] text-zinc-600 mt-1">
+                  Quy tắc: hoàn thành ≥1 task quan trọng hoặc task Ivy Lee #1/ngày
                 </div>
               </div>
             </div>
@@ -257,6 +258,7 @@ export default function WeeklyReportModal({ onClose }: Props) {
                 const energies = (energyHistory || []).filter((r: any) => r.date === day.dateStr);
                 const mood = (moodHistory || []).find((m: any) => m.date === day.dateStr)?.mood ?? null;
                 const adherence = (morningAdherenceHistory || []).find((a: any) => a.date === day.dateStr)?.completed ?? [];
+                const streak = (streakHistory || []).find((s: any) => s.date === day.dateStr) || null;
 
                 const sessions = ['morning', 'noon', 'afternoon', 'evening', 'late_night'];
                 const bySession: Record<string, any> = {};
@@ -286,6 +288,12 @@ export default function WeeklyReportModal({ onClose }: Props) {
                         <SplitSquareHorizontal className="w-3.5 h-3.5 text-emerald-400" />
                         Checklist: {Array.isArray(adherence) ? adherence.length : 0}
                       </div>
+                      {streak && (
+                        <div className="inline-flex items-center gap-2 px-2 py-1 rounded-lg border bg-rose-500/10 border-rose-500/20 text-xs text-rose-300">
+                          <Flame className="w-3.5 h-3.5" />
+                          Streak
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
