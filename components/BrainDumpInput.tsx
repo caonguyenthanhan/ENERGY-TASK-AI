@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Send, Loader2, Sparkles, Merge } from 'lucide-react';
+import { Send, Loader2, Sparkles, Merge, X } from 'lucide-react';
 import { parseTaskWithAI, ParsedTask } from '@/lib/ai';
 import { useTaskStore, Task } from '@/lib/store';
 
@@ -16,6 +16,17 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
   const [pendingTasks, setPendingTasks] = useState<ParsedTask[] | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<{parsed: ParsedTask, existing: Task}[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
+
+  const formatDeadlinePreview = (deadline: string | null | undefined) => {
+    if (!deadline) return 'Không có hạn chót';
+    try {
+      const d = new Date(deadline);
+      if (isNaN(d.getTime())) return 'Hạn chót không hợp lệ';
+      return d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+    } catch {
+      return 'Hạn chót không hợp lệ';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,10 +55,16 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
         setPendingTasks(parsedTasks);
         setShowConfirmation(true);
       } else {
+        setPendingTasks(null);
+        setDuplicateWarning([]);
+        setShowConfirmation(false);
         alert('AI không tìm thấy công việc nào trong nội dung bạn nhập. Vui lòng thử lại với nội dung rõ ràng hơn.');
       }
     } catch (error: any) {
       console.error(error);
+      setPendingTasks(null);
+      setDuplicateWarning([]);
+      setShowConfirmation(false);
       alert('Có lỗi xảy ra khi phân tích công việc. Vui lòng thử lại.');
     } finally {
       setIsProcessing(false);
@@ -94,6 +111,13 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
     setPendingTasks(null);
     setDuplicateWarning([]);
     setShowConfirmation(false);
+  };
+
+  const removePendingTask = (index: number) => {
+    if (!pendingTasks) return;
+    const next = pendingTasks.filter((_, i) => i !== index);
+    setPendingTasks(next.length > 0 ? next : null);
+    if (next.length === 0) setShowConfirmation(false);
   };
 
   return (
@@ -171,14 +195,30 @@ export default function BrainDumpInput({ onTasksAdded }: Props) {
             <p className="text-sm text-zinc-300 mb-4">
               AI đã tìm thấy {pendingTasks.length} công việc:
             </p>
-            <ul className="list-disc pl-5 mb-6 text-sm text-zinc-400 max-h-40 overflow-y-auto custom-scrollbar">
+            <div className="mb-6 space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
               {pendingTasks.map((t, i) => (
-                <li key={i} className="mb-1">
-                  <span className="font-medium text-zinc-300">{t.title}</span>
-                  {t.durationMinutes && <span className="text-zinc-500"> ({t.durationMinutes}p)</span>}
-                </li>
+                <div key={i} className="flex items-start justify-between gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-zinc-200 truncate">{t.title}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                      <span>{Math.round(Number(t.durationMinutes || 0)) || 30}p</span>
+                      <span>•</span>
+                      <span>{formatDeadlinePreview(t.deadline)}</span>
+                      {t.isImportant && <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">Quan trọng</span>}
+                      {t.isUrgent && <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">Gấp</span>}
+                      {t.isRoutine && <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">Thường nhật</span>}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removePendingTask(i)}
+                    className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-zinc-200 transition-colors"
+                    aria-label="Bỏ task này"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               ))}
-            </ul>
+            </div>
             <div className="flex flex-wrap justify-end gap-3">
               <button
                 onClick={cancelAdd}

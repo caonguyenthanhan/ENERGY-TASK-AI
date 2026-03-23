@@ -67,6 +67,70 @@ type AppState = {
 
 const STORAGE_KEY = 'energy_task_ai_state_v2';
 
+function normalizeDeadline(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  if (!s) return null;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return s;
+}
+
+function normalizeDurationForNewTask(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+  if (!Number.isFinite(n)) return fallback;
+  const int = Math.round(n);
+  return int >= 1 ? int : fallback;
+}
+
+function normalizeDurationPatch(value: unknown): number | undefined {
+  const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+  if (!Number.isFinite(n)) return undefined;
+  const int = Math.round(n);
+  if (int < 1) return 1;
+  return int;
+}
+
+function normalizeTaskPatch(patch: Partial<Task>): Partial<Task> {
+  const out: Partial<Task> = { ...patch };
+
+  if ('title' in out) {
+    out.title = typeof out.title === 'string' ? out.title.trim() || 'Công việc không tên' : 'Công việc không tên';
+  }
+
+  if ('deadline' in out) {
+    out.deadline = out.deadline === null ? null : normalizeDeadline(out.deadline);
+  }
+
+  if ('durationMinutes' in out) {
+    const normalized = normalizeDurationPatch(out.durationMinutes);
+    if (normalized === undefined) delete (out as any).durationMinutes;
+    else out.durationMinutes = normalized;
+  }
+
+  if ('isImportant' in out) out.isImportant = Boolean(out.isImportant);
+  if ('isUrgent' in out) out.isUrgent = Boolean(out.isUrgent);
+  if ('isRoutine' in out) out.isRoutine = Boolean(out.isRoutine);
+
+  if ('resources' in out) {
+    out.resources = Array.isArray(out.resources)
+      ? out.resources.map(r => String(r).trim()).filter(Boolean)
+      : [];
+  }
+
+  if ('status' in out) {
+    const s = out.status;
+    out.status = s === 'todo' || s === 'done' || s === 'skipped' ? s : 'todo';
+  }
+
+  if ('listId' in out) {
+    out.listId = out.listId ? String(out.listId) : null;
+  }
+
+  return out;
+}
+
 const initialState: AppState = {
   tasks: [],
   lists: [],
@@ -119,11 +183,15 @@ function useTaskStoreInternal() {
             parsed.customPrompt = typeof parsed.customPrompt === 'string' ? parsed.customPrompt : '';
             parsed.tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
               ...t,
+              title: typeof t.title === 'string' ? t.title : 'Công việc không tên',
+              deadline: normalizeDeadline(t.deadline),
+              durationMinutes: normalizeDurationForNewTask(t.durationMinutes, 30),
               subtasks: Array.isArray(t.subtasks) ? t.subtasks : [],
               resources: Array.isArray(t.resources) ? t.resources : [],
               isImportant: t.isImportant ?? false,
               isUrgent: t.isUrgent ?? false,
               isRoutine: t.isRoutine ?? false,
+              status: t.status === 'todo' || t.status === 'done' || t.status === 'skipped' ? t.status : 'todo',
             })) : [];
             
             setState({ ...initialState, ...parsed });
@@ -270,7 +338,13 @@ function useTaskStoreInternal() {
 
   const addTasks = (parsedTasks: ParsedTask[]) => {
     const newTasks: Task[] = parsedTasks.map(pt => ({
-      ...pt,
+      title: typeof pt.title === 'string' ? pt.title.trim() || 'Công việc không tên' : 'Công việc không tên',
+      deadline: pt.deadline === null ? null : normalizeDeadline(pt.deadline),
+      durationMinutes: normalizeDurationForNewTask(pt.durationMinutes, 30),
+      isImportant: Boolean(pt.isImportant),
+      isUrgent: Boolean(pt.isUrgent),
+      isRoutine: Boolean(pt.isRoutine),
+      resources: Array.isArray(pt.resources) ? pt.resources.map(r => String(r).trim()).filter(Boolean) : [],
       id: uuidv4(),
       subtasks: [],
       createdAt: new Date().toISOString(),
@@ -310,7 +384,8 @@ function useTaskStoreInternal() {
   };
 
   const updateTask = (taskId: string, updates: Partial<Task>) => {
-    setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t) }));
+    const normalized = normalizeTaskPatch(updates);
+    setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === taskId ? { ...t, ...normalized } : t) }));
   };
 
   const reorderTasks = (sortedTaskIds: string[]) => {
