@@ -13,6 +13,8 @@ import SettingsModal from '@/components/SettingsModal';
 import ProfileModal from '@/components/ProfileModal';
 import WeeklyReportModal from '@/components/WeeklyReportModal';
 import WeeklyReviewModal from '@/components/WeeklyReviewModal';
+import MoodCheckIn from '@/components/MoodCheckIn';
+import MorningProtocolCard from '@/components/MorningProtocolCard';
 import ChatBot from '@/components/ChatBot';
 import TaskList from '@/components/TaskList';
 import CelebrationModal from '@/components/CelebrationModal';
@@ -201,6 +203,13 @@ export default function Home() {
               )}
             </AnimatePresence>
           </div>
+
+          {energyLevel && (
+            <div className="mt-6 space-y-6">
+              <MoodCheckIn />
+              <MorningProtocolCard />
+            </div>
+          )}
 
           <div className="mt-8">
             <BrainDumpInput onTasksAdded={addTasks} />
