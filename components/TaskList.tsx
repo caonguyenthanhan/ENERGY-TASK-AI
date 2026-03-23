@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { RefreshCw, Calendar, Brain, Star, Link as LinkIcon, Plus, ListFilter, SortAsc, Sparkles, Loader2, FolderPlus, Trash2 } from 'lucide-react';
 import { useTaskStore, Task, EnergyLevel } from '@/lib/store';
 import { organizeTasksWithAI, sortTasksWithAI } from '@/lib/ai';
@@ -51,6 +51,11 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
   const [newListName, setNewListName] = useState('');
 
   const { tasks, resetSkippedTasks, lists, addList, updateTask, deleteTask, deleteList, apiKeys, customPrompt, reorderTasks } = useTaskStore();
+  const nowRef = useRef<number>(0);
+
+  useEffect(() => {
+    nowRef.current = Date.now();
+  }, [tasks]);
 
   const handleAddList = () => {
     if (newListName.trim()) {
@@ -324,6 +329,8 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
               const listName = lists.find(l => l.id === task.listId)?.name;
               const prereq = task.prerequisiteTaskId ? tasks.find(t => t.id === task.prerequisiteTaskId) : null;
               const prereqBlocked = prereq ? prereq.status !== 'done' : false;
+              const deadlineTime = task.deadline ? new Date(task.deadline).getTime() : NaN;
+              const isOverdue = task.status === 'todo' && Number.isFinite(deadlineTime) && deadlineTime < nowRef.current;
               return (
                 <div
                   key={task.id}
@@ -351,6 +358,11 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
                         {listName}
                       </span>
                     )}
+                    {isOverdue && (
+                      <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400">
+                        Quá hạn
+                      </span>
+                    )}
                     {prereq && (
                       <span className={`px-2 py-0.5 rounded ${prereqBlocked ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
                         Tiền đề: {prereqBlocked ? 'chưa xong' : 'đã xong'}
@@ -368,6 +380,21 @@ export default function TaskList({ onEditTask, onAddManual, onCompleteTask, hide
                       {task.status === 'todo' ? 'Cần làm' : task.status === 'done' ? 'Xong' : 'Bỏ qua'}
                     </span>
                   </div>
+                  {isOverdue && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const d = task.deadline ? new Date(task.deadline) : new Date();
+                        const base = isNaN(d.getTime()) ? new Date() : d;
+                        base.setDate(base.getDate() + 1);
+                        updateTask(task.id, { deadline: base.toISOString() });
+                      }}
+                      className="absolute bottom-4 right-12 px-2.5 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 transition-colors text-xs font-medium"
+                      title="Gia hạn 1 ngày"
+                    >
+                      Gia hạn +1d
+                    </button>
+                  )}
                   {task.status !== 'done' && (
                     <button
                       onClick={(e) => {

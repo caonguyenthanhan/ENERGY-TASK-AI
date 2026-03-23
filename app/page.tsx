@@ -23,6 +23,7 @@ import CelebrationModal from '@/components/CelebrationModal';
 import LockedFeatureModal from '@/components/LockedFeatureModal';
 import { FeatureKey, getFeatureLabel, getRequiredPoints, isFeatureUnlocked } from '@/lib/features';
 import { APP_NAME } from '@/lib/app-config';
+import { getTextOnHex } from '@/lib/contrast';
 import confetti from 'canvas-confetti';
 
 export default function Home() {
@@ -43,6 +44,9 @@ export default function Home() {
     updateTask,
     weeklyReviews,
     user,
+    backgroundType,
+    backgroundValue,
+    backgroundOverlayColor,
   } = useTaskStore();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -53,6 +57,7 @@ export default function Home() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [showIvyLee, setShowIvyLee] = useState(false);
   const [lockedFeature, setLockedFeature] = useState<FeatureKey | null>(null);
+  const [overdueCount, setOverdueCount] = useState(0);
   const hasCelebrated = useRef(false);
   const currentStreak = getCurrentStreak();
   const email = user?.email as string | undefined;
@@ -61,6 +66,12 @@ export default function Home() {
   const weeklyReviewEnabled = isFeatureUnlocked({ feature: 'weeklyReview', points, email });
   const celebrationEnabled = isFeatureUnlocked({ feature: 'celebration', points, email });
   const chatbotEnabled = isFeatureUnlocked({ feature: 'chatbot', points, email });
+  const backgroundMediaEnabled = isFeatureUnlocked({ feature: 'backgroundMedia', points, email });
+  const titleTextClass = getTextOnHex(
+    backgroundType === 'color'
+      ? (backgroundValue || '#09090b')
+      : (backgroundMediaEnabled ? (backgroundOverlayColor || '#000000') : '#09090b')
+  );
 
   useEffect(() => {
     if (isLoaded && celebrationEnabled && points >= pointGoal && !hasCelebrated.current) {
@@ -88,6 +99,20 @@ export default function Home() {
       return () => clearTimeout(t);
     }
   }, [isLoaded, weeklyReviews, weeklyReviewEnabled]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const nowTs = Date.now();
+    const count = tasks.filter(t => {
+      if (t.status !== 'todo') return false;
+      if (!t.deadline) return false;
+      const d = new Date(t.deadline);
+      if (isNaN(d.getTime())) return false;
+      return d.getTime() < nowTs;
+    }).length;
+    const timer = setTimeout(() => setOverdueCount(count), 0);
+    return () => clearTimeout(timer);
+  }, [tasks, isLoaded]);
 
   const handleAddManual = () => {
     const t = addManualTask({ title: 'Công việc mới', deadline: null, durationMinutes: 30 });
@@ -129,7 +154,7 @@ export default function Home() {
             <Zap className="w-5 h-5 text-indigo-400" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">{APP_NAME}</h1>
+            <h1 className={`text-xl font-semibold tracking-tight ${titleTextClass}`}>{APP_NAME}</h1>
             <p className="text-xs text-zinc-500">Quản lý kỷ luật nhưng thấu hiểu</p>
           </div>
         </div>
@@ -169,6 +194,16 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {overdueCount > 0 && (
+        <div className="mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/5 px-4 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-sm text-rose-200">
+              Bạn có <span className="font-semibold">{overdueCount}</span> công việc quá hạn. Hệ thống sẽ ưu tiên nhắc và đưa lên đầu.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col lg:flex-row gap-8">
