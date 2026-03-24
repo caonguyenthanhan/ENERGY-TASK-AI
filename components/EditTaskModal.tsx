@@ -167,7 +167,7 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 overflow-y-auto">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -179,7 +179,7 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl"
+        className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden"
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-zinc-100">Chỉnh sửa công việc</h2>
@@ -191,7 +191,7 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
           </button>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-5 flex-1 overflow-y-auto pr-2 -mr-2">
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-1.5">Nội dung công việc</label>
             <input
@@ -355,7 +355,7 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
             </div>
 
             {subtasks.length > 0 ? (
-              <div className="space-y-2 mb-3">
+              <div className="space-y-2 mb-3 max-h-52 overflow-y-auto pr-2 -mr-2 overscroll-contain">
                 {subtasks.map(s => (
                   <div key={s.id} className="flex items-start justify-between gap-3 p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl">
                     <button onClick={() => toggleSubtask(s.id)} className={`mt-0.5 ${s.isCompleted ? 'text-emerald-400' : 'text-zinc-600 hover:text-zinc-300'} transition-colors`}>
@@ -454,7 +454,7 @@ export default function EditTaskModal({ task, onClose, onSave }: Props) {
           </div>
         </div>
 
-        <div className="mt-8 flex justify-end gap-3">
+        <div className="mt-6 pt-6 border-t border-zinc-800 flex justify-end gap-3">
           <button
             onClick={() => {
               const ok = window.confirm('Xoá công việc này? Hành động không thể hoàn tác.');
